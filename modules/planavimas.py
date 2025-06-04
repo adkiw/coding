@@ -84,7 +84,12 @@ def show(conn, c):
     # ==============================
     if selected != "Visi":
         numeris = selected.split(" – ")[0]
-        grupe_id = next((gid for gid, gnum, _ in grupes if gnum == numeris), None)
+        grupe_id = None
+        for gid, gnum, _ in grupes:
+            if gnum == numeris:
+                grupe_id = gid
+                break
+
         if grupe_id is not None:
             c.execute(
                 "SELECT regiono_kodas FROM grupiu_regionai WHERE grupe_id = ?",
@@ -127,9 +132,20 @@ def show(conn, c):
             ikr_laikas, bdl, ldl = None, None, None
 
         # Jeigu None arba NaN, paverčiame tuščius stringus
-        ikr_laikas = "" if ikr_laikas is None or (isinstance(ikr_laikas, float) and pd.isna(ikr_laikas)) else str(ikr_laikas)
-        bdl = "" if bdl is None or (isinstance(bdl, float) and pd.isna(bdl)) else str(bdl)
-        ldl = "" if ldl is None or (isinstance(ldl, float) and pd.isna(ldl)) else str(ldl)
+        if ikr_laikas is None or (isinstance(ikr_laikas, float) and pd.isna(ikr_laikas)):
+            ikr_laikas = ""
+        else:
+            ikr_laikas = str(ikr_laikas)
+
+        if bdl is None or (isinstance(bdl, float) and pd.isna(bdl)):
+            bdl = ""
+        else:
+            bdl = str(bdl)
+
+        if ldl is None or (isinstance(ldl, float) and pd.isna(ldl)):
+            ldl = ""
+        else:
+            ldl = str(ldl)
 
         papildomi_map[(v, d)] = {
             "ikr_laikas": ikr_laikas,
@@ -228,3 +244,37 @@ def show(conn, c):
         if vad:
             label += f" {vad}"
         if sa:
+            label += f" {sa}"
+
+        combined_index.append(label)
+
+    pivot_df.index = combined_index
+    pivot_df.index.name = "Vilkikas/Priekaba Vadybininkas SA"
+
+    # ==============================
+    # 15) Išvedame HTML lentelę per st.markdown
+    # ==============================
+    html = "<table>\n"
+    # Antraštės
+    html += "  <thead>\n    <tr>\n"
+    html += "      <th>Vilkikas/Priekaba Vadybininkas SA</th>\n"
+    for d in date_strs:
+        html += f"      <th>{d}</th>\n"
+    html += "    </tr>\n  </thead>\n"
+    # Turinio eilutės
+    html += "  <tbody>\n"
+    for idx in pivot_df.index:
+        html += "    <tr>\n"
+        html += f"      <td>{idx}</td>\n"
+        for d in date_strs:
+            val = pivot_df.at[idx, d]
+            # Jei langelis lygus NaN arba yra tuščias stringas, rodome blank
+            if pd.isna(val) or str(val).strip() == "":
+                cell_html = ""
+            else:
+                cell_html = val
+            html += f"      <td>{cell_html}</td>\n"
+        html += "    </tr>\n"
+    html += "  </tbody>\n</table>"
+
+    st.markdown(html, unsafe_allow_html=True)
