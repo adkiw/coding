@@ -51,7 +51,7 @@ def show(conn, c):
 
     # ==============================
     # 4) Iš lentelės "kroviniai" paimame įrašus su iškrovimo data šiame intervale
-    #    Naudojame date(iskrovimo_data), kad apdorotume ir atvejus, kai saugoma ir laikas
+    #    Naudojame date(iskrovimo_data), kad apdorotume įrašus, kuriuose saugomas ir laikas
     # ==============================
     start_str = start_date.isoformat()
     end_str = end_date.isoformat()
@@ -108,7 +108,15 @@ def show(conn, c):
     #    – iskrovimo_laikas
     #    – darbo_laikas (BDL)
     #    – likes_laikas (LDL)
-    #    Naudojame WHERE iskrovimo_data = ?, kad sutaptų su date(...) iš kroviniai.
+    #
+    #    ČIA KEISTA: originaliai buvo naudojamas WHERE date(iskrovimo_data) = ?,
+    #    tačiau UPDATE modulyje įrašai saugomi taip, kad stulpelis "data"
+    #    (vilkiku_darbo_laikai.data) yra lygu krovinio data, o pats "iskrovimo_data"
+    #    nurodytas atskirai.
+    #    Todėl planavime turime ieškoti pagal "data" stulpelį.
+    #
+    #    Cituojant UPDATE modulyje:
+    #    SELECT id FROM vilkiku_darbo_laikai WHERE vilkiko_numeris = ? AND data = ? :contentReference[oaicite:0]{index=0}
     # ==============================
     papildomi_map = {}
     for _, row in df_last.iterrows():
@@ -118,7 +126,7 @@ def show(conn, c):
             """
             SELECT iskrovimo_laikas, darbo_laikas, likes_laikas
             FROM vilkiku_darbo_laikai
-            WHERE vilkiko_numeris = ? AND date(iskrovimo_data) = ?
+            WHERE vilkiko_numeris = ? AND data = ?
             ORDER BY id DESC LIMIT 1
             """,
             (v, d)
@@ -128,7 +136,7 @@ def show(conn, c):
         else:
             ikr_laikas, bdl, ldl = None, None, None
 
-        # Jei None arba NaN, paverčiame tuščius stringus
+        # Jeigu None arba NaN, paverčiame tuščius stringus
         if ikr_laikas is None or (isinstance(ikr_laikas, float) and pd.isna(ikr_laikas)):
             ikr_laikas = ""
         else:
@@ -219,7 +227,7 @@ def show(conn, c):
             SELECT sa
             FROM vilkiku_darbo_laikai
             WHERE vilkiko_numeris = ?
-              AND date(iskrovimo_data) = ?
+              AND data = ?
             ORDER BY id DESC LIMIT 1
             """, (v, df_last.loc[df_last["vilkikas"] == v, "data"].values[0])
         ).fetchone()
