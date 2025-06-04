@@ -1,45 +1,51 @@
-# modules/main.py
-
 import streamlit as st
 st.set_page_config(layout="wide")
 
-from modules import dispo, kroviniai, vilkikai, priekabos, grupes, vairuotojai, klientai, darbuotojai, nustatymai, update, planavimas
+from modules import (
+    dispo_show,
+    kroviniai_show,
+    vilkikai_show,
+    priekabos_show,
+    grupes_show,
+    vairuotojai_show,
+    klientai_show,
+    darbuotojai_show,
+    nustatymai_show,
+    planavimas_show,   # <-- čia turi būti būtent taip
+    update_show
+)
 from db import init_db
 
-# Prisijungimas prie DB
 conn, c = init_db()
 
-# Moduliai rodomi meniu
 moduliai = [
     "Dispo", "Kroviniai", "Vilkikai", "Priekabos",
     "Grupės", "Vairuotojai", "Klientai",
     "Darbuotojai", "Nustatymai", "Planavimas", "Update"
 ]
 
-# Streamlit šoninis meniu
 st.sidebar.title("MENIU")
 modulis = st.sidebar.radio("Pasirinkite modulį:", moduliai)
 
-# Pagrindinis logikos blokas: kviečiame show funkciją pagal pasirinkimą
 if modulis == "Dispo":
-    dispo.show(conn, c)
+    dispo_show(conn, c)
 elif modulis == "Kroviniai":
-    kroviniai.show(conn, c)
+    kroviniai_show(conn, c)
 elif modulis == "Vilkikai":
-    vilkikai.show(conn, c)
+    vilkikai_show(conn, c)
 elif modulis == "Priekabos":
-    priekabos.show(conn, c)
+    priekabos_show(conn, c)
 elif modulis == "Grupės":
-    grupes.show(conn, c)
+    grupes_show(conn, c)
 elif modulis == "Vairuotojai":
-    vairuotojai.show(conn, c)
+    vairuotojai_show(conn, c)
 elif modulis == "Klientai":
-    klientai.show(conn, c)
+    klientai_show(conn, c)
 elif modulis == "Darbuotojai":
-    darbuotojai.show(conn, c)
+    darbuotojai_show(conn, c)
 elif modulis == "Nustatymai":
-    nustatymai.show(conn, c)
+    nustatymai_show(conn, c)
 elif modulis == "Planavimas":
-    planavimas.show(conn, c)
+    planavimas_show(conn, c)
 elif modulis == "Update":
-    update.show(conn, c)
+    update_show(conn, c)
