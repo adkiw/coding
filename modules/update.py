@@ -5,19 +5,21 @@ import pandas as pd
 from datetime import datetime, date
 
 # ==============================
-# 0) CSS tam, kad stulpeliai ir pavadinimai nebūtų lūžinami, o būtų horizontaliai skrolinami
+# 0) CSS: užtikriname, kad visi headeriai ir reikšmės nebūtų lūžinami,
+#    o visa eilutė būtų viena horizontali linija su skrolu
 # ==============================
 st.markdown("""
     <style>
-      /* Apgaubti visą lentelės bloką scroll-container div'u, kad atsirastų horizontali slinktis */
+      /* Apgaubti visą atvaizduojamą turinį scroll-container div'u,
+         kurio viduje galima slinkti horizontaliai */
       .scroll-container {
         overflow-x: auto;
       }
-      /* Stulpelių pavadinimai ir kiekvienas stulpelis neturėtų lūžti į naujas eilutes */
-      .scroll-container > div > div {
+      /* Pritaikyti visiems vidiniams elementams, kad tekstas nekeltų jokių lūžių */
+      .scroll-container * {
         white-space: nowrap !important;
       }
-      /* Sutrumpiname fontą, kad tilptų daugiau teksto */
+      /* Sutrumpinamas fontas, kad tilptų daugiau informacijos vienoje eilutėje */
       th, td, .stTextInput>div>div>input, .stDateInput>div>div>input {
         font-size: 12px !important;
       }
@@ -28,10 +30,7 @@ st.markdown("""
       .block-container {
         padding-top: 0.5rem !important;
       }
-      .streamlit-expanderHeader {
-        overflow-x: auto;
-      }
-      /* Pašaliname rodykles iš selectbox */
+      /* Paslėpti selectbox rodykles */
       div[role="option"] svg,
       div[role="combobox"] svg,
       span[data-baseweb="select"] svg {
@@ -64,23 +63,23 @@ def show(conn, c):
     st.title("DISPO – Vilkikų ir krovinių atnaujinimas (Update)")
 
     # ==============================
-    # 1) Pridedame trūkstamus stulpelius į vilkiku_darbo_laikai, jei jų dar nėra
+    # 1) Užtikriname, kad lentelėje "vilkiku_darbo_laikai" būtų visi stulpeliai
     # ==============================
     existing = [r[1] for r in c.execute("PRAGMA table_info(vilkiku_darbo_laikai)").fetchall()]
     extra_cols = [
         ("pakrovimo_statusas", "TEXT"),
-        ("pakrovimo_laikas", "TEXT"),
-        ("pakrovimo_data", "TEXT"),
-        ("iskrovimo_statusas", "TEXT"),
-        ("iskrovimo_laikas", "TEXT"),
-        ("iskrovimo_data", "TEXT"),
-        ("komentaras", "TEXT"),
-        ("sa", "TEXT"),
-        ("created_at", "TEXT"),
+        ("pakrovimo_laikas",       "TEXT"),
+        ("pakrovimo_data",         "TEXT"),
+        ("iskrovimo_statusas",     "TEXT"),
+        ("iskrovimo_laikas",       "TEXT"),
+        ("iskrovimo_data",         "TEXT"),
+        ("komentaras",             "TEXT"),
+        ("sa",                     "TEXT"),
+        ("created_at",             "TEXT"),
         ("ats_transporto_vadybininkas", "TEXT"),
-        ("ats_ekspedicijos_vadybininkas", "TEXT"),
-        ("trans_grupe", "TEXT"),
-        ("eksp_grupe", "TEXT"),
+        ("ats_ekspedicijos_vadybininkas","TEXT"),
+        ("trans_grupe",            "TEXT"),
+        ("eksp_grupe",             "TEXT"),
     ]
     for col, coltype in extra_cols:
         if col not in existing:
@@ -88,7 +87,7 @@ def show(conn, c):
     conn.commit()
 
     # ==============================
-    # 2) Filtrai: pasirinkti transporto vadybininką ir transporto grupę
+    # 2) Filtrai: transporto vadybininkas ir transporto grupė
     # ==============================
     vadybininkai = [
         r[0] for r in c.execute(
@@ -97,11 +96,11 @@ def show(conn, c):
     ]
     grupe_list = [r[0] for r in c.execute("SELECT pavadinimas FROM grupes").fetchall()]
 
-    vadyb = st.selectbox("Pasirink transporto vadybininką", [""] + vadybininkai, index=0)
-    grupe_filtras = st.selectbox("Filtruok pagal transporto grupę", [""] + grupe_list, index=0)
+    vadyb        = st.selectbox("Pasirink transporto vadybininką", [""] + vadybininkai, index=0)
+    grupe_filtras= st.selectbox("Filtruok pagal transporto grupę", [""] + grupe_list, index=0)
 
     # ==============================
-    # 3) Parenkame vilkikus pagal pasirinktus filtrus
+    # 3) Pasirenkame vilkikus pagal filtrus
     # ==============================
     vilkikai_info = c.execute("""
         SELECT v.numeris, g.pavadinimas
@@ -112,12 +111,12 @@ def show(conn, c):
 
     vilkikai = []
     for v, g in vilkikai_info:
-        # Filtruojame pagal vadybininką
+        # Filtras: vadybininkas
         if vadyb and c.execute(
             "SELECT vadybininkas FROM vilkikai WHERE numeris = ?", (v,)
         ).fetchone()[0] != vadyb:
             continue
-        # Filtruojame pagal transporto grupę
+        # Filtras: transporto grupė
         if grupe_filtras and (g or "") != grupe_filtras:
             continue
         vilkikai.append(v)
@@ -127,7 +126,7 @@ def show(conn, c):
         return
 
     # ==============================
-    # 4) Iš lentelės "kroviniai" paimame įrašus
+    # 4) Paimame kroviniai iš lentelės "kroviniai"
     # ==============================
     today = date.today()
     placeholders = ", ".join("?" for _ in vilkikai)
@@ -149,7 +148,7 @@ def show(conn, c):
     kroviniai = c.execute(query, params).fetchall()
 
     # ==============================
-    # 5) Transporto ir ekspedicijos grupių žemėlapiai
+    # 5) Sudarome žemėlapius transporto grupėms ir ekspedicijos grupėms
     # ==============================
     vilk_grupes = dict(c.execute("""
         SELECT v.numeris, g.pavadinimas
@@ -165,7 +164,7 @@ def show(conn, c):
     """).fetchall())
 
     # ==============================
-    # 6) Stulpelių proporcijos
+    # 6) Nustatome stulpelių proporcijas (vienetai proporcingi)
     # ==============================
     col_widths = [
         0.5,  # Save
@@ -207,18 +206,19 @@ def show(conn, c):
     ]
 
     # ==============================
-    # 7) Rodyti antraštę (turi būti viduje scroll-container, kad neplyštų)
+    # 7) Rodyti antraštę su headeriais vienoje eilutėje
     # ==============================
     st.markdown("<div class='scroll-container'>", unsafe_allow_html=True)
     cols = st.columns(col_widths)
     for i, label in enumerate(headers):
+        # Kiekvienas header eilutėje – be jokių eilučių lūžių
         cols[i].markdown(f"<b>{label}</b>", unsafe_allow_html=True)
 
     # ==============================
-    # 8) Rodyti kiekvieną krovinį po viena eilute
+    # 8) Rodyti kiekvieną krovinį – viskas vienoje eilutėje
     # ==============================
     for k in kroviniai:
-        # 8.1) Ištraukiame paskutinį darbo įrašą iš vilkiku_darbo_laikai
+        # 8.1) Paimame paskutinį įrašą iš vilkiku_darbo_laikai
         darbo = c.execute("""
             SELECT sa, darbo_laikas, likes_laikas, created_at,
                    pakrovimo_statusas, pakrovimo_laikas, pakrovimo_data,
@@ -230,7 +230,7 @@ def show(conn, c):
             ORDER BY id DESC LIMIT 1
         """, (k[5], k[3])).fetchone()
 
-        # 8.2) Tikriname, ar krovinys jau „Iškrauta“ praeityje – tada praleidžiam
+        # 8.2) Patikriname, ar krovinys "Iškrauta" ir senesnis nei šiandien → praleidžiame
         if darbo and darbo[7] == "Iškrauta":
             try:
                 iskrov_data = pd.to_datetime(darbo[9]).date()
@@ -242,24 +242,24 @@ def show(conn, c):
         if iskrov_data and iskrov_data < today:
             continue
 
-        # 8.3) Paruošiame rodomus ir redaguojamus laukus
-        sa = darbo[0] if darbo and darbo[0] else ""
-        bdl = darbo[1] if darbo and darbo[1] not in [None, ""] else ""
-        ldl = darbo[2] if darbo and darbo[2] not in [None, ""] else ""
-        created = darbo[3] if darbo and darbo[3] else None
-        pk_status = darbo[4] if darbo and darbo[4] else ""
-        pk_laikas = darbo[5] if darbo and darbo[5] else (str(k[7])[:5] if k[7] else "")
-        pk_data = darbo[6] if darbo and darbo[6] else str(k[3])
-        komentaras = darbo[10] if darbo and darbo[10] else ""
-        trans_gr = darbo[12] if darbo and darbo[12] else vilk_grupes.get(k[5], "")
-        eksp_gr = darbo[13] if darbo and darbo[13] else eksp_grupes.get(k[0], "")
+        # 8.3) Paruošiame rodomus laukus
+        sa          = darbo[0] if darbo and darbo[0] else ""
+        bdl         = darbo[1] if darbo and darbo[1] not in [None, ""] else ""
+        ldl         = darbo[2] if darbo and darbo[2] not in [None, ""] else ""
+        created     = darbo[3] if darbo and darbo[3] else None
+        pk_status   = darbo[4] if darbo and darbo[4] else ""
+        pk_laikas   = darbo[5] if darbo and darbo[5] else (str(k[7])[:5] if k[7] else "")
+        pk_data     = darbo[6] if darbo and darbo[6] else str(k[3])
+        komentaras  = darbo[10] if darbo and darbo[10] else ""
+        trans_gr    = darbo[12] if darbo and darbo[12] else vilk_grupes.get(k[5], "")
+        eksp_gr     = darbo[13] if darbo and darbo[13] else eksp_grupes.get(k[0], "")
 
         row_cols = st.columns(col_widths)
 
-        # 8.4) Stulpelis „Save“
+        # 8.4) Save mygtukas
         save = row_cols[0].button("💾", key=f"save_{k[0]}")
 
-        # 8.5) Stulpelis „Atnaujinta:“
+        # 8.5) Atnaujinta data
         if created:
             laikas = pd.to_datetime(created)
             row_cols[1].markdown(
@@ -269,48 +269,48 @@ def show(conn, c):
         else:
             row_cols[1].markdown("<div style='padding:2px 6px;'>&nbsp;</div>", unsafe_allow_html=True)
 
-        # 8.6) Stulpelis „Vilkikas“
+        # 8.6) Vilkikas
         row_cols[2].write(str(k[5])[:7])
-        # 8.7) Stulpelis „Priekaba“
+        # 8.7) Priekaba
         row_cols[3].write(str(k[6])[:7])
-        # 8.8) Stulpelis „Pakrovimo data“
+        # 8.8) Pakrovimo data (originali)
         row_cols[4].write(str(k[3]))
-        # 8.9) Stulpelis „Pakrovimo laikas“
+        # 8.9) Pakrovimo laikas (originalus)
         row_cols[5].write(
             str(k[7])[:5] + (f" - {str(k[8])[:5]}" if k[8] else "")
         )
-        # 8.10) Stulpelis „Pakrovimo vieta“
+        # 8.10) Pakrovimo vieta
         vieta_pk = f"{k[11] or ''}{k[12] or ''}"
         row_cols[6].write(vieta_pk[:18])
-        # 8.11) Stulpelis „Iškr. data“
+        # 8.11) Iškr. data (originali)
         row_cols[7].write(str(k[4]))
-        # 8.12) Stulpelis „Iškr. laikas“
+        # 8.12) Iškr. laikas (originalus)
         row_cols[8].write(
             str(k[9])[:5] + (f" - {str(k[10])[:5]}" if k[10] else "")
         )
-        # 8.13) Stulpelis „Iškr. vieta“
+        # 8.13) Iškr. vieta
         vieta_is = f"{k[13] or ''}{k[14] or ''}"
         row_cols[9].write(vieta_is[:18])
-        # 8.14) Stulpelis „Km“
+        # 8.14) Km
         row_cols[10].write(str(k[15]))
 
-        # 8.15) Stulpelis „Transporto grupė“
+        # 8.15) Transporto grupė
         row_cols[11].write(trans_gr or "")
-        # 8.16) Stulpelis „Transporto vadybininkas“
+        # 8.16) Transporto vadybininkas
         tv = c.execute(
             "SELECT vadybininkas FROM vilkikai WHERE numeris = ?", (k[5],)
         ).fetchone()
         row_cols[12].write(tv[0] if tv else "")
-        # 8.17) Stulpelis „Ekspedicinė grupė“
+        # 8.17) Ekspedicinė grupė
         row_cols[13].write(eksp_gr or "")
-        # 8.18) Stulpelis „Ekspedicijos vadybininkas“
+        # 8.18) Ekspedicijos vadybininkas
         row_cols[14].write(k[16] if len(k) > 16 else "")
 
-        # 8.19) Tekstinis input – „SA“
+        # 8.19) Tekstinis įvesties laukas – SA
         sa_in = row_cols[15].text_input("", value=str(sa), key=f"sa_{k[0]}", label_visibility="collapsed")
-        # 8.20) Tekstinis input – „BDL“
+        # 8.20) Tekstinis įvesties laukas – BDL
         bdl_in = row_cols[16].text_input("", value=str(bdl), key=f"bdl_{k[0]}", label_visibility="collapsed")
-        # 8.21) Tekstinis input – „LDL“
+        # 8.21) Tekstinis įvesties laukas – LDL
         ldl_in = row_cols[17].text_input("", value=str(ldl), key=f"ldl_{k[0]}", label_visibility="collapsed")
 
         # 8.22) Pakrovimo data (edit)
@@ -371,7 +371,7 @@ def show(conn, c):
             "", value=komentaras, key=f"komentaras_{k[0]}", label_visibility="collapsed"
         )
 
-        # 8.29) Išsaugojimo logika (Save)
+        # 8.29) Išsaugojimo (Save) logika
         if save:
             jau_irasas = c.execute("""
                 SELECT id FROM vilkiku_darbo_laikai WHERE vilkiko_numeris = ? AND data = ?
@@ -419,6 +419,6 @@ def show(conn, c):
             st.success("✅ Išsaugota!")
 
     # ==============================
-    # 9) Uždengiame scroll-container div
+    # 9) Uždarome scroll-container div
     # ==============================
     st.markdown("</div>", unsafe_allow_html=True)
