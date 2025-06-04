@@ -27,17 +27,17 @@ def show(conn, c):
     selected = st.selectbox("Pasirinkti ekspedicijos grupę", group_options)
 
     # ==============================
-    # 2) Apskaičiuojame datų intervalą: nuo vakar iki savaitės į priekį
+    # 2) Apskaičiuojame datų intervalą: nuo vakar iki dviejų savaičių į priekį
     # ==============================
     today = datetime.date.today()
     start_date = today - datetime.timedelta(days=1)
-    end_date = today + datetime.timedelta(days=7)
+    end_date = today + datetime.timedelta(days=14)  # dabar dvi savaitės į priekį
 
     date_list = [
         start_date + datetime.timedelta(days=i)
         for i in range((end_date - start_date).days + 1)
     ]
-    date_strs = [d.isoformat() for d in date_list]  # pvz. ['2025-06-03', ...]
+    date_strs = [d.isoformat() for d in date_list]  # pvz. ['2025-06-03', ..., '2025-06-17']
 
     # ==============================
     # 3) Paimame visų vilkikų informaciją: numeris, priekaba, vadybininkas
@@ -55,7 +55,7 @@ def show(conn, c):
     #    – iskrovimo_salis, iskrovimo_regionas  → „vietos_kodas“
     #    – date(iskrovimo_data) AS data (vien tik data)
     #    – date(pakrovimo_data)   AS pak_data
-    #    Taip pat filtruojame pagal date(iskrovimo_data) režimo intervalą.
+    #    Filtruojame pagal date(iskrovimo_data) intervalą.
     # ==============================
     start_str = start_date.isoformat()
     end_str   = end_date.isoformat()
@@ -105,29 +105,23 @@ def show(conn, c):
         return
 
     # ==============================
-    # 7) Kiekvienam vilkikui paliekame tik paskutinį įrašą („data“ stulpelyje didžiausia reikšmė)
+    # 7) Kiekvienam vilkikui parenkame tik paskutinį įrašą („data“ stulpelyje didžiausia reikšmė)
     # ==============================
     df_last = df.loc[df.groupby("vilkikas")["data"].idxmax()].copy()
     # Dabar df_last turi stulpelius: vilkikas, salis, regionas, data (iškrovimo), pak_data (pakrovimo)
 
     # ==============================
-    # 8) Iš lentelės "vilkiku_darbo_laikai" paimame tris papildomus laukus:
+    # 8) Iš lentelės "vilkiku_darbo_laikai" paimame papildomus laukus:
     #    – iškrovimo_laikas („iskrovimo_laikas“)
     #    – darbo_laikas    („darbo_laikas“)
     #    – likes_laikas    („likes_laikas“)
     #
-    #    SVARBU: Update modulyje „data“ laukas lentelėje vilkiku_darbo_laikai
-    #    yra išsaugomas kaip krovinio „pakrovimo_data“. Todėl ryšį turime daryti:
-    #        WHERE vilkiko_numeris = ? AND data = pak_data
-    #
-    #    („iskrovimo_data“ atskiroje kolonoje dabar saugomas tik laiko informaicija, bet
-    #     ryšiui remiamės į „data“ stulpelį).
+    #    Filtruojame pagal `data = pak_data` (tą pačią, kurią Update modulyje įrašome).
     # ==============================
     papildomi_map = {}
     for _, row in df_last.iterrows():
-        v = row["vilkikas"]
-        pak_d = row["pak_data"]     # pvz. "2025-06-04"
-        # Ieškome įrašą vilkiku_darbo_laikai lentelėje, kur data = pakrovimo_data
+        v    = row["vilkikas"]
+        pak_d = row["pak_data"]     # pvz. "2025-06-07"
         rc = c.execute(
             """
             SELECT iskrovimo_laikas, darbo_laikas, likes_laikas
@@ -169,8 +163,7 @@ def show(conn, c):
 
     # ==============================
     # 9) Paruošiame stulpelį "cell_val": 
-    #    – liks vienoje eilutėje: 
-    #      [vietos_kodas] [ikr_laikas or "--"] [bdl or "--"] [ldl or "--"]
+    #    – vienoje eilutėje: [vietos_kodas] [ikr_laikas or "--"] [bdl or "--"] [ldl or "--"]
     #    – jeigu „vietos_kodas“ tuščias → grąžinam tuščią stringą
     # ==============================
     def make_cell(vilkikas, iskr_data, vieta):
@@ -205,7 +198,7 @@ def show(conn, c):
     # ==============================
     # 10) Sukuriame pivot lentelę:
     #       – index   = vilkikas
-    #       – columns = data (iškrovimo data, pvz. '2025-06-05')
+    #       – columns = data (iškrovimo data, pvz. '2025-06-05', ..., '2025-06-17')
     #       – values  = cell_val
     # ==============================
     pivot_df = df_last.pivot(
@@ -235,8 +228,6 @@ def show(conn, c):
     # ==============================
     sa_map = {}
     for v in pivot_df.index:
-        # reikia rasti pakrovimo datą, susietą su paskutine iškrovimo data
-        # t.y. iš df_last paimame pak_data to vilkiko
         pak_d = df_last.loc[df_last["vilkikas"] == v, "pak_data"].values[0]
         row = c.execute(
             """
@@ -295,7 +286,7 @@ def show(conn, c):
         html += f"      <td>{idx}</td>\n"
         for d in date_strs:
             val = pivot_df.at[idx, d]
-            # jei val = NaN arba blank, paliekiame tuščią
+            # jei val = NaN arba blank, rodome tuščią
             if pd.isna(val) or str(val).strip() == "":
                 cell_html = ""
             else:
