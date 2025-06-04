@@ -1,7 +1,13 @@
+# main.py
+
 import streamlit as st
 st.set_page_config(layout="wide")
 
-from modules import dispo, kroviniai, vilkikai, priekabos, grupes, vairuotojai, klientai, darbuotojai, nustatymai, update
+from modules import (
+    dispo, kroviniai, vilkikai, priekabos,
+    grupes, vairuotojai, klientai,
+    darbuotojai, nustatymai, update, planavimas
+)
 from db import init_db
 
 # Prisijungimas prie DB
@@ -11,30 +17,31 @@ conn, c = init_db()
 moduliai = [
     "Dispo", "Kroviniai", "Vilkikai", "Priekabos",
     "Grupės", "Vairuotojai", "Klientai",
-    "Darbuotojai", "Nustatymai", "Update"
+    "Darbuotojai", "Nustatymai", "Update", "Planavimas"
 ]
 
-# Modulio pasirinkimas
-modulis = st.sidebar.radio("📂 Pasirink modulį", moduliai)
+st.sidebar.title("Navigacija")
+pasirinktas_puslapis = st.sidebar.radio("Pasirinkite modulį", moduliai)
 
-# Modulių vykdymas
-if modulis == "Dispo":
+if pasirinktas_puslapis == "Dispo":
     dispo.show(conn, c)
-elif modulis == "Kroviniai":
+elif pasirinktas_puslapis == "Kroviniai":
     kroviniai.show(conn, c)
-elif modulis == "Vilkikai":
+elif pasirinktas_puslapis == "Vilkikai":
     vilkikai.show(conn, c)
-elif modulis == "Priekabos":
+elif pasirinktas_puslapis == "Priekabos":
     priekabos.show(conn, c)
-elif modulis == "Grupės":
+elif pasirinktas_puslapis == "Grupės":
     grupes.show(conn, c)
-elif modulis == "Vairuotojai":
+elif pasirinktas_puslapis == "Vairuotojai":
     vairuotojai.show(conn, c)
-elif modulis == "Klientai":
+elif pasirinktas_puslapis == "Klientai":
     klientai.show(conn, c)
-elif modulis == "Darbuotojai":
+elif pasirinktas_puslapis == "Darbuotojai":
     darbuotojai.show(conn, c)
-elif modulis == "Nustatymai":
+elif pasirinktas_puslapis == "Nustatymai":
     nustatymai.show(conn, c)
-elif modulis == "Update":
+elif pasirinktas_puslapis == "Update":
     update.show(conn, c)
+elif pasirinktas_puslapis == "Planavimas":
+    planavimas.show(conn, c)
