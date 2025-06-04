@@ -8,13 +8,12 @@ def show(conn, c):
     st.title("DISPO – Planavimas")
 
     # ==============================
-    # 0) CSS klasė “tiny” norint mažesniu šriftu parašyti “nėra”
+    # 0) CSS stilius lentelės atvaizdavimui
     # ==============================
     st.markdown("""
     <style>
-    .tiny { font-size:10px; color:#888; }
     table { border-collapse: collapse; width: 100%; }
-    th, td { border:1px solid #ddd; padding:4px; vertical-align: top; text-align:center; }
+    th, td { border: 1px solid #ddd; padding: 4px; vertical-align: top; text-align: center; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -22,7 +21,7 @@ def show(conn, c):
     # 1) Užkrauname visas ekspedicijos grupes (id, numeris, pavadinimas)
     # ==============================
     c.execute("SELECT id, numeris, pavadinimas FROM grupes ORDER BY numeris")
-    grupes = c.fetchall()  # kiekvienas: (id, numeris, pavadinimas)
+    grupes = c.fetchall()  # [(id, numeris, pavadinimas), ...]
 
     group_options = ["Visi"] + [f"{numeris} – {pavadinimas}" for _, numeris, pavadinimas in grupes]
     selected = st.selectbox("Pasirinkti ekspedicijos grupę", group_options)
@@ -38,13 +37,13 @@ def show(conn, c):
         start_date + datetime.timedelta(days=i)
         for i in range((end_date - start_date).days + 1)
     ]
-    date_strs = [d.isoformat() for d in date_list]
+    date_strs = [d.isoformat() for d in date_list]  # ['YYYY-MM-DD', ...]
 
     # ==============================
-    # 3) Paimame visų vilkikų numerius su priekaba ir pagrindiniu vadybininku
+    # 3) Paimame visų vilkikų informaciją: numeris, priekaba, vadybininkas
     # ==============================
     c.execute("SELECT numeris, priekaba, vadybininkas FROM vilkikai ORDER BY numeris")
-    vilkikai_rows = c.fetchall()  # kiekvienas: (numeris, priekaba, vadybininkas)
+    vilkikai_rows = c.fetchall()  # [(numeris, priekaba, vadybininkas), ...]
     vilkikai_all = [row[0] for row in vilkikai_rows]
 
     priekaba_map = {row[0]: (row[1] or "") for row in vilkikai_rows}
@@ -73,31 +72,25 @@ def show(conn, c):
         return
 
     # ==============================
-    # 5) Užtikriname, kad "salis" ir "regionas" yra tekstinio tipo ir tuščias vietoje NULL
+    # 5) Konvertuojame „salis“ ir „regionas“ į tekstą, sujungiame į „vietos_kodas“
     # ==============================
     df["salis"] = df["salis"].fillna("").astype(str)
     df["regionas"] = df["regionas"].fillna("").astype(str)
     df["data"] = pd.to_datetime(df["data"]).dt.date.astype(str)
-    df["vietos_kodas"] = df["salis"] + df["regionas"]
+    df["vietos_kodas"] = df["salis"] + df["regionas"]  # pvz. "IT10"
 
     # ==============================
-    # 6) Jeigu pasirinkta ekspedicijos grupė – filtruojame pagal grupės regionus
+    # 6) Filtravimas pagal ekspedicijos grupę (jei pasirinkta ne „Visi“)
     # ==============================
     if selected != "Visi":
         numeris = selected.split(" – ")[0]
-        grupe_id = None
-        for gid, gnum, _ in grupes:
-            if gnum == numeris:
-                grupe_id = gid
-                break
-
+        grupe_id = next((gid for gid, gnum, _ in grupes if gnum == numeris), None)
         if grupe_id is not None:
             c.execute(
                 "SELECT regiono_kodas FROM grupiu_regionai WHERE grupe_id = ?",
                 (grupe_id,)
             )
-            regionai = [row[0] for row in c.fetchall()]
-
+            regionai = [row[0] for row in c.fetchall()]  # pvz. ["FR10", "IT20", ...]
             df = df[df["vietos_kodas"].apply(lambda x: any(x.startswith(r) for r in regionai))]
 
     if df.empty:
@@ -105,18 +98,18 @@ def show(conn, c):
         return
 
     # ==============================
-    # 7) Atrenkame tik paskutinį įrašą per vilkiką šiame intervale
+    # 7) Parenkame tik paskutinį (didžiausią) kiekvieno vilkiko įrašą šiame intervale
     # ==============================
     df_last = df.loc[df.groupby("vilkikas")["data"].idxmax()].copy()
 
     # ==============================
-    # 8) Papildomų duomenų paėmimas iš vilkiku_darbo_laikai:
-    #     – iskrovimo_laikas
-    #     – darbo_laikas (BDL)
-    #     – likes_laikas (LDL)
+    # 8) Iš lentelės "vilkiku_darbo_laikai" paimame papildomus laukus:
+    #    – iskrovimo_laikas
+    #    – darbo_laikas (BDL)
+    #    – likes_laikas (LDL)
     # ==============================
     papildomi_map = {}
-    for idx, row in df_last.iterrows():
+    for _, row in df_last.iterrows():
         v = row["vilkikas"]
         d = row["data"]
         rc = c.execute(
@@ -133,25 +126,21 @@ def show(conn, c):
         else:
             ikr_laikas, bdl, ldl = None, None, None
 
-        # Jei None arba NaN, paverčiame tuščia eilute
-        if ikr_laikas is None or (isinstance(ikr_laikas, float) and pd.isna(ikr_laikas)):
-            ikr_laikas = ""
-        if bdl is None or (isinstance(bdl, float) and pd.isna(bdl)):
-            bdl = ""
-        if ldl is None or (isinstance(ldl, float) and pd.isna(ldl)):
-            ldl = ""
+        # Jeigu None arba NaN, paverčiame tuščius stringus
+        ikr_laikas = "" if ikr_laikas is None or (isinstance(ikr_laikas, float) and pd.isna(ikr_laikas)) else str(ikr_laikas)
+        bdl = "" if bdl is None or (isinstance(bdl, float) and pd.isna(bdl)) else str(bdl)
+        ldl = "" if ldl is None or (isinstance(ldl, float) and pd.isna(ldl)) else str(ldl)
 
         papildomi_map[(v, d)] = {
-            "ikr_laikas": str(ikr_laikas),
-            "bdl": str(bdl),
-            "ldl": str(ldl)
+            "ikr_laikas": ikr_laikas,
+            "bdl": bdl,
+            "ldl": ldl
         }
 
     # ==============================
     # 9) Paruošiame stulpelį "cell_val":
-    #     – vienoje eilutėje: {vietos_kodas} {ikr_laikas_or_nėra} {bdl_or_nėra} {ldl_or_nėra}
-    #     – jeigu regionas tuščias, viskas tuščia
-    #     – jei regionas yra, bet laiko/BDL/LDL neliko, užrašome "nėra" mažyčiu šriftu
+    #     – vienoje eilutėje: regiono_kodas ikr_laikas_or_-- bdl_or_-- ldl_or_--
+    #     – jeigu regiono nėra, langelis tuščias
     # ==============================
     def make_cell(vilkikas, data, vieta):
         if not vieta:
@@ -160,39 +149,30 @@ def show(conn, c):
         info = papildomi_map.get((vilkikas, data), {})
         parts = []
 
-        # Regiono kodas visada dedamas pirmas
+        # Regiono kodas visada pirmas
         parts.append(vieta)
 
-        # Iškr. laikas arba "nėra"
+        # Iškr. laikas arba "--"
         ikr = info.get("ikr_laikas", "")
-        if ikr:
-            parts.append(ikr)
-        else:
-            parts.append("<span class='tiny'>nėra</span>")
+        parts.append(ikr if ikr else "--")
 
-        # BDL arba "nėra"
+        # BDL arba "--"
         bdl_val = info.get("bdl", "")
-        if bdl_val:
-            parts.append(bdl_val)
-        else:
-            parts.append("<span class='tiny'>nėra</span>")
+        parts.append(bdl_val if bdl_val else "--")
 
-        # LDL arba "nėra"
+        # LDL arba "--"
         ldl_val = info.get("ldl", "")
-        if ldl_val:
-            parts.append(ldl_val)
-        else:
-            parts.append("<span class='tiny'>nėra</span>")
+        parts.append(ldl_val if ldl_val else "--")
 
-        # Sujungiame tarpu, bet dalys 4: regionas, ikr, bdl, ldl
         return " ".join(parts)
 
     df_last["cell_val"] = df_last.apply(
-        lambda r: make_cell(r["vilkikas"], r["data"], r["vietos_kodas"]), axis=1
+        lambda r: make_cell(r["vilkikas"], r["data"], r["vietos_kodas"]),
+        axis=1
     )
 
     # ==============================
-    # 10) Pivot lentelė:
+    # 10) Sukuriame pivot lentelę:
     #     index = vilkikas, columns = data, values = cell_val
     # ==============================
     pivot_df = df_last.pivot(
@@ -202,14 +182,14 @@ def show(conn, c):
     )
 
     # ==============================
-    # 11) Užtikriname, kad stulpeliai būtų pilni pagal datas
+    # 11) Užtikriname, kad stulpeliai atitiktų visas datas intervale
     # ==============================
     pivot_df = pivot_df.reindex(columns=date_strs, fill_value="")
 
     # ==============================
     # 12) Filtruojame eilutes pagal grupės logiką:
-    #     – Jei "Visi": rodomi visi vilkikai (tuščiomis eilutėmis tiems be įrašų)
-    #     – Jei kita grupė: rodomi tik tie vilkikai, kurių df_last yra bent vienas įrašas
+    #     – Jei "Visi": rodomi visi vilkikai (tuščiomis eilutėmis)
+    #     – Jei kita grupė: rodomi tik tie vilkikai, kurių yra įrašas df_last
     # ==============================
     if selected == "Visi":
         pivot_df = pivot_df.reindex(index=vilkikai_all, fill_value="")
@@ -233,7 +213,7 @@ def show(conn, c):
         sa_map[v] = row[0] if row and row[0] is not None else ""
 
     # ==============================
-    # 14) Sukuriame naują indekso stulpelį:
+    # 14) Sukuriame indekso stulpelį:
     #     "Vilkikas/Priekaba Vadybininkas SA"
     # ==============================
     combined_index = []
@@ -248,35 +228,3 @@ def show(conn, c):
         if vad:
             label += f" {vad}"
         if sa:
-            label += f" {sa}"
-
-        combined_index.append(label)
-
-    pivot_df.index = combined_index
-    pivot_df.index.name = "Vilkikas/Priekaba Vadybininkas SA"
-
-    # ==============================
-    # 15) Išvedame HTML lentelę per st.markdown,
-    #     kad atvaizduotų <span class="tiny">nėra</span>
-    # ==============================
-    html = "<table>\n"
-    # Antraštės
-    html += "  <thead>\n    <tr>\n"
-    html += "      <th>Vilkikas/Priekaba Vadybininkas SA</th>\n"
-    for d in date_strs:
-        html += f"      <th>{d}</th>\n"
-    html += "    </tr>\n  </thead>\n"
-    # Turinio eilutės
-    html += "  <tbody>\n"
-    for idx in pivot_df.index:
-        html += "    <tr>\n"
-        html += f"      <td>{idx}</td>\n"
-        for d in date_strs:
-            val = pivot_df.at[idx, d]
-            # Jei langelis tuščias, tiesiog paliekame tuščią
-            cell_html = val if val else ""
-            html += f"      <td>{cell_html}</td>\n"
-        html += "    </tr>\n"
-    html += "  </tbody>\n</table>"
-
-    st.markdown(html, unsafe_allow_html=True)
