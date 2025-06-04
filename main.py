@@ -1,51 +1,57 @@
+# main.py
+
 import streamlit as st
 st.set_page_config(layout="wide")
 
-from modules import (
-    dispo_show,
-    kroviniai_show,
-    vilkikai_show,
-    priekabos_show,
-    grupes_show,
-    vairuotojai_show,
-    klientai_show,
-    darbuotojai_show,
-    nustatymai_show,
-    planavimas_show,   # <-- čia turi būti būtent taip
-    update_show
-)
+# Tiesiogiai importuojame kiekvieną modulį iš modules katalogo
+import modules.dispo as dispo
+import modules.kroviniai as kroviniai
+import modules.vilkikai as vilkikai
+import modules.priekabos as priekabos
+import modules.grupes as grupes
+import modules.vairuotojai as vairuotojai
+import modules.klientai as klientai
+import modules.darbuotojai as darbuotojai
+import modules.nustatymai as nustatymai
+import modules.planavimas as planavimas
+import modules.update as update
+
 from db import init_db
 
+# Prisijungimas prie DB
 conn, c = init_db()
 
+# Moduliai rodomi meniu
 moduliai = [
     "Dispo", "Kroviniai", "Vilkikai", "Priekabos",
     "Grupės", "Vairuotojai", "Klientai",
     "Darbuotojai", "Nustatymai", "Planavimas", "Update"
 ]
 
+# Streamlit šoninis meniu
 st.sidebar.title("MENIU")
 modulis = st.sidebar.radio("Pasirinkite modulį:", moduliai)
 
+# Pagrindinis logikos blokas: kviečiame atitinkamo modulio show() funkciją
 if modulis == "Dispo":
-    dispo_show(conn, c)
+    dispo.show(conn, c)
 elif modulis == "Kroviniai":
-    kroviniai_show(conn, c)
+    kroviniai.show(conn, c)
 elif modulis == "Vilkikai":
-    vilkikai_show(conn, c)
+    vilkikai.show(conn, c)
 elif modulis == "Priekabos":
-    priekabos_show(conn, c)
+    priekabos.show(conn, c)
 elif modulis == "Grupės":
-    grupes_show(conn, c)
+    grupes.show(conn, c)
 elif modulis == "Vairuotojai":
-    vairuotojai_show(conn, c)
+    vairuotojai.show(conn, c)
 elif modulis == "Klientai":
-    klientai_show(conn, c)
+    klientai.show(conn, c)
 elif modulis == "Darbuotojai":
-    darbuotojai_show(conn, c)
+    darbuotojai.show(conn, c)
 elif modulis == "Nustatymai":
-    nustatymai_show(conn, c)
+    nustatymai.show(conn, c)
 elif modulis == "Planavimas":
-    planavimas_show(conn, c)
+    planavimas.show(conn, c)
 elif modulis == "Update":
-    update_show(conn, c)
+    update.show(conn, c)
