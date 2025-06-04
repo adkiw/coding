@@ -1,48 +1,57 @@
 # main.py
 
 import streamlit as st
+st.set_page_config(layout="wide")
 
-# TURI BŪTI PIRMAS KVIEČIMAS – prieš bet kokį kitą st.xxx kvietimą:
-st.set_page_config(
-    page_title="DISPO – Aplikacija",
-    layout="wide"
-)
+# Tiesiogiai importuojame kiekvieną modulį iš modules katalogo
+import modules.dispo as dispo
+import modules.kroviniai as kroviniai
+import modules.vilkikai as vilkikai
+import modules.priekabos as priekabos
+import modules.grupes as grupes
+import modules.vairuotojai as vairuotojai
+import modules.klientai as klientai
+import modules.darbuotojai as darbuotojai
+import modules.nustatymai as nustatymai
+import modules.planavimas as planavimas
+import modules.update as update
 
-# Dabar tęsiame su savo import’ais ir visa kita
-import sqlite3
-from modules import dispo, kroviniai, vilkikai, priekabos, grupes
-from modules import vairuotojai, klientai, darbuotojai, nustatymai
-from modules import planavimas, update
+from db import init_db
 
-conn = sqlite3.connect("db.sqlite")
-c = conn.cursor()
+# Prisijungimas prie DB
+conn, c = init_db()
 
-menu = st.sidebar.radio(
-    "Pasirinkite modulį:",
-    ("Dispo", "Kroviniai", "Vilkikai", "Priekabos", "Grupės",
-     "Vairuotojai", "Klientai", "Darbuotojai", "Nustatymai",
-     "Planavimas", "Update")
-)
+# Moduliai rodomi meniu
+moduliai = [
+    "Dispo", "Kroviniai", "Vilkikai", "Priekabos",
+    "Grupės", "Vairuotojai", "Klientai",
+    "Darbuotojai", "Nustatymai", "Planavimas", "Update"
+]
 
-if menu == "Dispo":
+# Streamlit šoninis meniu
+st.sidebar.title("MENIU")
+modulis = st.sidebar.radio("Pasirinkite modulį:", moduliai)
+
+# Pagrindinis logikos blokas: kviečiame atitinkamo modulio show() funkciją
+if modulis == "Dispo":
     dispo.show(conn, c)
-elif menu == "Kroviniai":
+elif modulis == "Kroviniai":
     kroviniai.show(conn, c)
-elif menu == "Vilkikai":
+elif modulis == "Vilkikai":
     vilkikai.show(conn, c)
-elif menu == "Priekabos":
+elif modulis == "Priekabos":
     priekabos.show(conn, c)
-elif menu == "Grupės":
+elif modulis == "Grupės":
     grupes.show(conn, c)
-elif menu == "Vairuotojai":
+elif modulis == "Vairuotojai":
     vairuotojai.show(conn, c)
-elif menu == "Klientai":
+elif modulis == "Klientai":
     klientai.show(conn, c)
-elif menu == "Darbuotojai":
+elif modulis == "Darbuotojai":
     darbuotojai.show(conn, c)
-elif menu == "Nustatymai":
+elif modulis == "Nustatymai":
     nustatymai.show(conn, c)
-elif menu == "Planavimas":
+elif modulis == "Planavimas":
     planavimas.show(conn, c)
-elif menu == "Update":
+elif modulis == "Update":
     update.show(conn, c)
