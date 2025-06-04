@@ -31,19 +31,17 @@ def show(conn, c):
     date_strs = [d.isoformat() for d in date_list]
 
     # ==============================
-    # 3) Paimame visų vilkikų numerius su priekaba ir vadybininku
+    # 3) Paimame visų vilkikų numerius su priekaba ir pagrindiniu vadybininku
     # ==============================
     c.execute("SELECT numeris, priekaba, vadybininkas FROM vilkikai ORDER BY numeris")
     vilkikai_rows = c.fetchall()  # kiekvienas: (numeris, priekaba, vadybininkas)
-    # Sąrašas visų vilkikų pavadinimų
     vilkikai_all = [row[0] for row in vilkikai_rows]
 
-    # Susikuriame žemėlapius: vilkikas -> priekaba, vilkikas -> vadybininkas
     priekaba_map = {row[0]: (row[1] or "") for row in vilkikai_rows}
     vadybininkas_map = {row[0]: (row[2] or "") for row in vilkikai_rows}
 
     # ==============================
-    # 4) Iš lentelės "kroviniai" paimame visus įrašus su iškrovimo data šiame intervale
+    # 4) Iš lentelės "kroviniai" paimame įrašus su iškrovimo data šiame intervale
     # ==============================
     start_str = start_date.isoformat()
     end_str = end_date.isoformat()
@@ -114,33 +112,61 @@ def show(conn, c):
     # ==============================
     # 9) Filtruojame eilutes pagal tai, ar vilkikas egzistuoja df po filtravimo
     #    Jeigu grupė "Visi" – rodomi visi vilkikai; jeigu kita grupė – tik tie,
-    #    kurie turi bent vieną įrašą df (o pivot_df jau apkarpytas)
+    #    kurie turi bent vieną ne-tuščią langelį
     # ==============================
     if selected == "Visi":
-        # Jei "Visi", įtraukiame visus vilkikus, net jei kažkuriam neturime planavimo
         pivot_df = pivot_df.reindex(index=vilkikai_all, fill_value="")
     else:
-        # Filtruojame, kad liktų tik vilkikai, turintys bent vieną ne-tuščią langelį
         pivot_df = pivot_df.dropna(how="all", subset=date_strs)
 
     # ==============================
-    # 10) Sukuriame naują indekso stulpelį: "Vilkikas / Priekaba / Vadybininkas"
+    # 10) Paimame SA reikšmes iš paskutinio įrašo vilkiku_darbo_laikai kiekvienam vilkikui
+    # ==============================
+    # Paruošiame žemėlapį: vilkikas -> SA (naujausias)
+    sa_map = {}
+    for v in pivot_df.index:
+        row = c.execute(
+            """
+            SELECT sa
+            FROM vilkiku_darbo_laikai
+            WHERE vilkiko_numeris = ?
+              AND sa IS NOT NULL
+            ORDER BY data DESC LIMIT 1
+            """, (v,)
+        ).fetchone()
+        sa_map[v] = row[0] if row and row[0] else ""
+
+    # ==============================
+    # 11) Sukuriame naują indekso stulpelį:
+    #     "Vilkikas/Priekaba Vadybininkas SA"
+    # - Tarp vilkiko ir priekabos nėra tarpų aplink "/"
+    # - Tarp vadybininko ir SA įdedamas tarpas
     # ==============================
     combined_index = []
     for v in pivot_df.index:
         priek = priekaba_map.get(v, "")
         vad = vadybininkas_map.get(v, "")
-        combined_label = f"{v}"
+        sa = sa_map.get(v, "")
+
+        # Suformuojame "Vilkikas/Priekaba"
+        vp_part = v
         if priek:
-            combined_label += f" / {priek}"
+            vp_part += f"/{priek}"
+
+        # Po to " Vadybininkas" (jei yra)
         if vad:
-            combined_label += f" / {vad}"
-        combined_index.append(combined_label)
+            vp_part += f" {vad}"
+
+        # Ir galiausiai " SA" (jei yra)
+        if sa:
+            vp_part += f" {sa}"
+
+        combined_index.append(vp_part)
 
     pivot_df.index = combined_index
-    pivot_df.index.name = "Vilkikas / Priekaba / Vadybininkas"
+    pivot_df.index.name = "Vilkikas/Priekaba Vadybininkas SA"
 
     # ==============================
-    # 11) Išvedame lentelę Streamlit'e
+    # 12) Išvedame lentelę Streamlit'e
     # ==============================
     st.dataframe(pivot_df, use_container_width=True)
