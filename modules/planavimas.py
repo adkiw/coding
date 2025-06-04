@@ -8,12 +8,24 @@ def show(conn, c):
     st.title("DISPO – Planavimas")
 
     # ==============================
-    # 0) CSS stilius lentelės atvaizdavimui
+    # 0) CSS stilius lentelės atvaizdavimui su horizontaliniu skrolu
     # ==============================
     st.markdown("""
     <style>
-      table { border-collapse: collapse; width: 100%; }
-      th, td { border: 1px solid #ddd; padding: 4px; vertical-align: top; text-align: center; }
+      .scroll-container {
+        overflow-x: auto;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        white-space: nowrap;
+      }
+      th, td {
+        border: 1px solid #ddd;
+        padding: 4px;
+        vertical-align: top;
+        text-align: center;
+      }
     </style>
     """, unsafe_allow_html=True)
 
@@ -31,7 +43,7 @@ def show(conn, c):
     # ==============================
     today = datetime.date.today()
     start_date = today - datetime.timedelta(days=1)
-    end_date = today + datetime.timedelta(days=14)  # dabar dvi savaitės į priekį
+    end_date = today + datetime.timedelta(days=14)  # dvi savaitės į priekį
 
     date_list = [
         start_date + datetime.timedelta(days=i)
@@ -52,7 +64,7 @@ def show(conn, c):
     # ==============================
     # 4) Iš lentelės "kroviniai" paimame:
     #    – vilkikas
-    #    – iskrovimo_salis, iskrovimo_regionas  → „vietos_kodas“
+    #    – iskrovimo_salis, iskrovimo_regionas → „vietos_kodas“
     #    – date(iskrovimo_data) AS data (vien tik data)
     #    – date(pakrovimo_data)   AS pak_data
     #    Filtruojame pagal date(iskrovimo_data) intervalą.
@@ -80,10 +92,10 @@ def show(conn, c):
     # ==============================
     # 5) Konvertuojame „salis“ ir „regionas“ į tekstą, sujungiame į „vietos_kodas“
     # ==============================
-    df["salis"]   = df["salis"].fillna("").astype(str)
-    df["regionas"]= df["regionas"].fillna("").astype(str)
-    df["data"]    = pd.to_datetime(df["data"]).dt.date.astype(str)
-    df["pak_data"]= pd.to_datetime(df["pak_data"]).dt.date.astype(str)
+    df["salis"]    = df["salis"].fillna("").astype(str)
+    df["regionas"] = df["regionas"].fillna("").astype(str)
+    df["data"]     = pd.to_datetime(df["data"]).dt.date.astype(str)
+    df["pak_data"] = pd.to_datetime(df["pak_data"]).dt.date.astype(str)
     df["vietos_kodas"] = df["salis"] + df["regionas"]  # pvz. "IT10"
 
     # ==============================
@@ -108,20 +120,20 @@ def show(conn, c):
     # 7) Kiekvienam vilkikui parenkame tik paskutinį įrašą („data“ stulpelyje didžiausia reikšmė)
     # ==============================
     df_last = df.loc[df.groupby("vilkikas")["data"].idxmax()].copy()
-    # Dabar df_last turi stulpelius: vilkikas, salis, regionas, data (iškrovimo), pak_data (pakrovimo)
+    # df_last turi stulpelius: vilkikas, salis, regionas, data (iškrovimo), pak_data (pakrovimo)
 
     # ==============================
-    # 8) Iš lentelės "vilkiku_darbo_laikai" paimame papildomus laukus:
+    # 8) Iš lentelės "vilkiku_darbo_laikai" paimame:
     #    – iškrovimo_laikas („iskrovimo_laikas“)
     #    – darbo_laikas    („darbo_laikas“)
     #    – likes_laikas    („likes_laikas“)
     #
-    #    Filtruojame pagal `data = pak_data` (tą pačią, kurią Update modulyje įrašome).
+    #    Filtruojame pagal `data = pak_data`
     # ==============================
     papildomi_map = {}
     for _, row in df_last.iterrows():
-        v    = row["vilkikas"]
-        pak_d = row["pak_data"]     # pvz. "2025-06-07"
+        v     = row["vilkikas"]
+        pak_d = row["pak_data"]  # pvz. "2025-06-07"
         rc = c.execute(
             """
             SELECT iskrovimo_laikas, darbo_laikas, likes_laikas
@@ -137,7 +149,7 @@ def show(conn, c):
         else:
             ikr_laikas, bdl, ldl = None, None, None
 
-        # Jeigu None arba NaN → paverčiame į tuščią stringą
+        # Jei None arba NaN → paverčiame į tuščią stringą
         if ikr_laikas is None or (isinstance(ikr_laikas, float) and pd.isna(ikr_laikas)):
             ikr_laikas = ""
         else:
@@ -153,8 +165,7 @@ def show(conn, c):
         else:
             ldl = str(ldl)
 
-        # Saugojame pagal raktą (vilkiko numeris, iškrovimo data),
-        # tačiau toliau naudodami „pak_data“ ryšys su vilkiku_darbo_laikai
+        # Saugojame pagal raktą (vilkiko numeris, iškrovimo data)
         papildomi_map[(v, row["data"])] = {
             "ikr_laikas": ikr_laikas,
             "bdl":         bdl,
@@ -162,29 +173,29 @@ def show(conn, c):
         }
 
     # ==============================
-    # 9) Paruošiame stulpelį "cell_val": 
+    # 9) Paruošiame stulpelį "cell_val":
     #    – vienoje eilutėje: [vietos_kodas] [ikr_laikas or "--"] [bdl or "--"] [ldl or "--"]
     #    – jeigu „vietos_kodas“ tuščias → grąžinam tuščią stringą
     # ==============================
     def make_cell(vilkikas, iskr_data, vieta):
         if not vieta:
-            return ""  # jeigu nėra regiono, langelis tuščias
+            return ""  # jei regiono nėra, tuščias langelis
 
         info = papildomi_map.get((vilkikas, iskr_data), {})
         parts = []
 
-        # 1) regiono kodas (pvz. “IT10”)
+        # regiono kodas (pvz. “IT10”)
         parts.append(vieta)
 
-        # 2) iškrovimo laikas arba "--"
+        # iškrovimo laikas arba "--"
         ikr = info.get("ikr_laikas", "")
         parts.append(ikr if ikr else "--")
 
-        # 3) BDL arba "--"
+        # BDL arba "--"
         bdl_val = info.get("bdl", "")
         parts.append(bdl_val if bdl_val else "--")
 
-        # 4) LDL arba "--"
+        # LDL arba "--"
         ldl_val = info.get("ldl", "")
         parts.append(ldl_val if ldl_val else "--")
 
@@ -208,23 +219,18 @@ def show(conn, c):
     )
 
     # ==============================
-    # 11) Užtikriname, kad stulpeliai atitiktų visas datos reikšmes intervale
+    # 11) Užtikriname, kad stulpeliai atitiktų visas „date_strs“ datas
     # ==============================
     pivot_df = pivot_df.reindex(columns=date_strs, fill_value="")
 
     # ==============================
-    # 12) Filtruojame pagal grupės logiką:
-    #       – jei "Visi" → atvaizduojam visus vilkikus (tuščiomis eilutėmis tiems be df_last)
-    #       – jei konkreti grupė → rodome tik vilkikus, turinčius df_last įrašą
+    # 12) Rodyti tik vilkikus, turinčius „df_last“ įrašą (t.y. tie, kurie iškrauna per du savaites)
     # ==============================
-    if selected == "Visi":
-        pivot_df = pivot_df.reindex(index=vilkikai_all, fill_value="")
-    else:
-        pivot_df = pivot_df.reindex(index=df_last["vilkikas"].unique(), fill_value="")
+    pivot_df = pivot_df.reindex(index=df_last["vilkikas"].unique(), fill_value="")
 
     # ==============================
     # 13) Paimame SA (paskutinę reikšmę) iš vilkiku_darbo_laikai kiekvienam vilkikui:
-    #     – filtruojame pagal `data = pak_data` (tą pačią, kurią naudojome aukščiau)
+    #     – filtruojame pagal `data = pak_data`
     # ==============================
     sa_map = {}
     for v in pivot_df.index:
@@ -268,10 +274,9 @@ def show(conn, c):
     pivot_df.index.name = "Vilkikas/Priekaba Vadybininkas SA"
 
     # ==============================
-    # 15) Generuojame HTML lentelę per st.markdown,
-    #     kad atvaizduotume „--“ vietoje trūkstamų laiko/BDL/LDL ir blank vietoje tuščių langelių.
+    # 15) Generuojame HTML lentelę su horizontaliu skrolu
     # ==============================
-    html = "<table>\n"
+    html = "<div class='scroll-container'><table>\n"
     # 15.1) Antraštės eilutė
     html += "  <thead>\n    <tr>\n"
     html += "      <th>Vilkikas/Priekaba Vadybininkas SA</th>\n"
@@ -286,13 +291,13 @@ def show(conn, c):
         html += f"      <td>{idx}</td>\n"
         for d in date_strs:
             val = pivot_df.at[idx, d]
-            # jei val = NaN arba blank, rodome tuščią
+            # jei val = NaN arba blank, paliekame tuščią
             if pd.isna(val) or str(val).strip() == "":
                 cell_html = ""
             else:
                 cell_html = val
             html += f"      <td>{cell_html}</td>\n"
         html += "    </tr>\n"
-    html += "  </tbody>\n</table>"
+    html += "  </tbody>\n</table></div>"
 
     st.markdown(html, unsafe_allow_html=True)
