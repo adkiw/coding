@@ -14,20 +14,20 @@ def show(conn, c):
     group_options = ["Visi"] + [f"{numeris} – {pavadinimas}" for _, numeris, pavadinimas in grupes]
     selected = st.selectbox("Pasirinkti ekspedicijos grupę", group_options)
 
-    # 2) SQL užklausa: kiekvienam vilkikui rasti paskutinį (didžiausią) iškrovimo įrašą
+    # 2) SQL užklausa: kiekvienam vilkikui rasti paskutinį „Iškrauta“ įrašą vilkiku_darbo_laikai
     query = """
-        SELECT k.vilkikas AS vilkikas,
-               k.iskrovimo_regionas AS paskutinis_regionas,
-               k.iskrovimo_data AS paskutine_data
-        FROM kroviniai k
-        JOIN (
-            SELECT vilkikas AS v, MAX(iskrovimo_data) AS max_data
-            FROM kroviniai
-            WHERE iskrovimo_data IS NOT NULL
-            GROUP BY vilkikas
-        ) sub ON k.vilkikas = sub.v AND k.iskrovimo_data = sub.max_data
-        WHERE k.vilkikas IS NOT NULL
-        ORDER BY k.vilkikas
+        SELECT v.vilkiko_numeris AS vilkikas,
+               v.atvykimo_iskrovimas AS paskutinis_regionas,
+               v.data AS paskutine_data
+        FROM vilkiku_darbo_laikai v
+        WHERE v.iskrovimo_statusas = 'Iškrauta'
+          AND v.data = (
+              SELECT MAX(v2.data)
+              FROM vilkiku_darbo_laikai v2
+              WHERE v2.vilkiko_numeris = v.vilkiko_numeris
+                AND v2.iskrovimo_statusas = 'Iškrauta'
+          )
+        ORDER BY v.vilkiko_numeris
     """
     df = pd.read_sql_query(query, conn)
 
