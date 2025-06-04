@@ -84,12 +84,7 @@ def show(conn, c):
     # ==============================
     if selected != "Visi":
         numeris = selected.split(" – ")[0]
-        grupe_id = None
-        for gid, gnum, _ in grupes:
-            if gnum == numeris:
-                grupe_id = gid
-                break
-
+        grupe_id = next((gid for gid, gnum, _ in grupes if gnum == numeris), None)
         if grupe_id is not None:
             c.execute(
                 "SELECT regiono_kodas FROM grupiu_regionai WHERE grupe_id = ?",
@@ -121,7 +116,7 @@ def show(conn, c):
             """
             SELECT iskrovimo_laikas, darbo_laikas, likes_laikas
             FROM vilkiku_darbo_laikai
-            WHERE vilkiko_numeris = ? AND data = ?
+            WHERE vilkiko_numeris = ? AND iskrovimo_data = ?
             ORDER BY id DESC LIMIT 1
             """,
             (v, d)
