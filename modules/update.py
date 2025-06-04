@@ -5,7 +5,7 @@ import pandas as pd
 from datetime import datetime, date
 
 # ==============================
-# 0) CSS: užtikriname, kad visi headeriai ir reikšmės nebūtų lūžinami,
+# 0) CSS tam, kad visi headeriai ir reikšmės nebūtų lūžinami,
 #    o visa eilutė būtų viena horizontali linija su skrolu
 # ==============================
 st.markdown("""
@@ -168,51 +168,67 @@ def show(conn, c):
     # ==============================
     col_widths = [
         0.5,  # Save
-        0.85, # Atnaujinta:
-        0.4,  # Vilkikas
-        0.4,  # Priekaba
-        0.7,  # Pakr. data (originali)
-        0.7,  # Pakr. laikas (originalus)
-        1.0,  # Pakrovimo vieta
-        0.7,  # Iškr. data (originali)
-        0.7,  # Iškr. laikas (originalus)
-        1.0,  # Iškr. vieta
+        0.85, # Atn.
+        0.4,  # Vilk.
+        0.4,  # Priek.
+        0.7,  # P.D.
+        0.7,  # P.L.
+        1.0,  # P.V.
+        0.7,  # I.D.
+        0.7,  # I.L.
+        1.0,  # I.V.
         0.6,  # Km
-        0.45, # Transporto grupė (nauja)
-        0.8,  # Transporto vadybininkas
-        0.45, # Ekspedicinė grupė (nauja)
-        0.8,  # Ekspedicijos vadybininkas
+        0.45, # T.Gr.
+        0.8,  # T.Vad.
+        0.45, # E.Gr.
+        0.8,  # E.Vad.
         0.45, # SA
         0.45, # BDL
         0.45, # LDL
-        0.8,  # Pakr. data (edit)
-        0.5,  # Pakr. laikas (edit)
-        0.75, # Pakr. statusas
-        0.8,  # Iškr. data (edit)
-        0.5,  # Iškr. laikas (edit)
-        0.75, # Iškr. statusas
-        1.0,  # Komentaras
+        0.8,  # P.D.*
+        0.5,  # P.L.*
+        0.75, # P.St.*
+        0.8,  # I.D.*
+        0.5,  # I.L.*
+        0.75, # I.St.*
+        1.0,  # Kom.
     ]
 
     headers = [
-        "Save", "Atnaujinta:", "Vilkikas", "Priekaba", "Pakr. data", "Pakr. laikas", "Pakrovimo vieta",
-        "Iškr. data", "Iškr. laikas", "Iškr. vieta", "Km",
-        "Transporto grupė", "Transporto vadybininkas",
-        "Ekspedicinė grupė", "Ekspedicijos vadybininkas",
-        "SA", "BDL", "LDL",
-        "Pakr. data (edit)", "Pakr. laikas (edit)", "Pakr. statusas",
-        "Iškr. data (edit)", "Iškr. laikas (edit)", "Iškr. statusas",
-        "Komentaras"
+        ("💾",       "Save"),      # Save
+        ("Atn.",     "Atnaujinta:"),# Atnaujinta:
+        ("Vilk.",    "Vilkikas"),  # Vilkikas
+        ("Priek.",   "Priekaba"),  # Priekaba
+        ("P.D.",     "Pakr. data"),# Pakr. data
+        ("P.L.",     "Pakr. laikas"),# Pakr. laikas
+        ("P.V.",     "Pakrov. vieta"),# Pakrovimo vieta
+        ("I.D.",     "Iškr. data"),# Iškr. data
+        ("I.L.",     "Iškr. laikas"),# Iškr. laikas
+        ("I.V.",     "Iškr. vieta"),# Iškr. vieta
+        ("Km",       "Km"),        # Km
+        ("T.Gr.",    "Transporto grupė"), # Transporto grupė
+        ("T.Vad.",   "Transporto vadybininkas"),# Transporto vadybininkas
+        ("E.Gr.",    "Ekspedicinė grupė"),# Ekspedicinė grupė
+        ("E.Vad.",   "Ekspedicijos vadybininkas"),# Ekspedicijos vadybininkas
+        ("SA",       "SA"),        # SA
+        ("BDL",      "BDL"),       # BDL
+        ("LDL",      "LDL"),       # LDL
+        ("P.D.*",    "Pakr. data (edit)"),# Pakr. data (edit)
+        ("P.L.*",    "Pakr. laikas (edit)"),# Pakr. laikas (edit)
+        ("P.St.*",   "Pakr. statusas"),# Pakr. statusas (edit)
+        ("I.D.*",    "Iškr. data (edit)"),# Iškr. data (edit)
+        ("I.L.*",    "Iškr. laikas (edit)"),# Iškr. laikas (edit)
+        ("I.St.*",   "Iškr. statusas"),# Iškr. statusas (edit)
+        ("Kom.",     "Komentaras") # Komentaras
     ]
 
     # ==============================
-    # 7) Rodyti antraštę su headeriais vienoje eilutėje
+    # 7) Rodyti antraštę su headeriais vienoje eilutėje su tooltips
     # ==============================
     st.markdown("<div class='scroll-container'>", unsafe_allow_html=True)
     cols = st.columns(col_widths)
-    for i, label in enumerate(headers):
-        # Kiekvienas header eilutėje – be jokių eilučių lūžių
-        cols[i].markdown(f"<b>{label}</b>", unsafe_allow_html=True)
+    for i, (abbr, full) in enumerate(headers):
+        cols[i].markdown(f"<b title='{full}'>{abbr}</b>", unsafe_allow_html=True)
 
     # ==============================
     # 8) Rodyti kiekvieną krovinį – viskas vienoje eilutėje
