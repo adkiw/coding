@@ -23,9 +23,7 @@ def show(conn, c):
     c.execute("SELECT id, numeris, pavadinimas FROM grupes ORDER BY numeris")
     grupes = c.fetchall()  # [(id, numeris, pavadinimas), ...]
 
-    group_options = ["Visi"] + [
-        f"{numeris} – {pavadinimas}" for _, numeris, pavadinimas in grupes
-    ]
+    group_options = ["Visi"] + [f"{numeris} – {pavadinimas}" for _, numeris, pavadinimas in grupes]
     selected = st.selectbox("Pasirinkti ekspedicijos grupę", group_options)
 
     # ==============================
@@ -52,17 +50,22 @@ def show(conn, c):
     vadybininkas_map = { row[0]: (row[2] or "") for row in vilkikai_rows }
 
     # ==============================
-    # 4) Iš lentelės "kroviniai" paimame įrašus su iškrovimo data šiame intervale
-    #    Naudojame date(iskrovimo_data), kad gautume tik datą (ne laiką).
+    # 4) Iš lentelės "kroviniai" paimame:
+    #    – vilkikas
+    #    – iskrovimo_salis, iskrovimo_regionas  → „vietos_kodas“
+    #    – date(iskrovimo_data) AS data (vien tik data)
+    #    – date(pakrovimo_data)   AS pak_data
+    #    Taip pat filtruojame pagal date(iskrovimo_data) režimo intervalą.
     # ==============================
     start_str = start_date.isoformat()
-    end_str = end_date.isoformat()
+    end_str   = end_date.isoformat()
     query = f"""
         SELECT
             vilkikas AS vilkikas,
             iskrovimo_salis AS salis,
             iskrovimo_regionas AS regionas,
-            date(iskrovimo_data) AS data
+            date(iskrovimo_data) AS data,
+            date(pakrovimo_data)   AS pak_data
         FROM kroviniai
         WHERE date(iskrovimo_data) BETWEEN '{start_str}' AND '{end_str}'
           AND iskrovimo_data IS NOT NULL
@@ -77,9 +80,10 @@ def show(conn, c):
     # ==============================
     # 5) Konvertuojame „salis“ ir „regionas“ į tekstą, sujungiame į „vietos_kodas“
     # ==============================
-    df["salis"] = df["salis"].fillna("").astype(str)
-    df["regionas"] = df["regionas"].fillna("").astype(str)
-    df["data"]   = pd.to_datetime(df["data"]).dt.date.astype(str)
+    df["salis"]   = df["salis"].fillna("").astype(str)
+    df["regionas"]= df["regionas"].fillna("").astype(str)
+    df["data"]    = pd.to_datetime(df["data"]).dt.date.astype(str)
+    df["pak_data"]= pd.to_datetime(df["pak_data"]).dt.date.astype(str)
     df["vietos_kodas"] = df["salis"] + df["regionas"]  # pvz. "IT10"
 
     # ==============================
@@ -101,23 +105,29 @@ def show(conn, c):
         return
 
     # ==============================
-    # 7) Kiekvienam vilkikui pasirenkame tik paskutinį įrašą šiame intervale
+    # 7) Kiekvienam vilkikui paliekame tik paskutinį įrašą („data“ stulpelyje didžiausia reikšmė)
     # ==============================
     df_last = df.loc[df.groupby("vilkikas")["data"].idxmax()].copy()
+    # Dabar df_last turi stulpelius: vilkikas, salis, regionas, data (iškrovimo), pak_data (pakrovimo)
 
     # ==============================
-    # 8) Iš lentelės "vilkiku_darbo_laikai" paimame papildomus laukus:
-    #    – iškrovimo_laikas
-    #    – darbo_laikas (BDL)
-    #    – likes_laikas (LDL)
+    # 8) Iš lentelės "vilkiku_darbo_laikai" paimame tris papildomus laukus:
+    #    – iškrovimo_laikas („iskrovimo_laikas“)
+    #    – darbo_laikas    („darbo_laikas“)
+    #    – likes_laikas    („likes_laikas“)
     #
-    #    **Filtruojame pagal** `data = ?`
-    #    (kadangi Update modulyje „Iškr. data (edit)“ išsaugo stulpelyje `data`) :contentReference[oaicite:1]{index=1}
+    #    SVARBU: Update modulyje „data“ laukas lentelėje vilkiku_darbo_laikai
+    #    yra išsaugomas kaip krovinio „pakrovimo_data“. Todėl ryšį turime daryti:
+    #        WHERE vilkiko_numeris = ? AND data = pak_data
+    #
+    #    („iskrovimo_data“ atskiroje kolonoje dabar saugomas tik laiko informaicija, bet
+    #     ryšiui remiamės į „data“ stulpelį).
     # ==============================
     papildomi_map = {}
     for _, row in df_last.iterrows():
         v = row["vilkikas"]
-        d = row["data"]   # pvz. "2025-06-07"
+        pak_d = row["pak_data"]     # pvz. "2025-06-04"
+        # Ieškome įrašą vilkiku_darbo_laikai lentelėje, kur data = pakrovimo_data
         rc = c.execute(
             """
             SELECT iskrovimo_laikas, darbo_laikas, likes_laikas
@@ -125,7 +135,7 @@ def show(conn, c):
             WHERE vilkiko_numeris = ? AND data = ?
             ORDER BY id DESC LIMIT 1
             """,
-            (v, d)
+            (v, pak_d)
         ).fetchone()
 
         if rc:
@@ -149,28 +159,28 @@ def show(conn, c):
         else:
             ldl = str(ldl)
 
-        papildomi_map[(v, d)] = {
+        # Saugojame pagal raktą (vilkiko numeris, iškrovimo data),
+        # tačiau toliau naudodami „pak_data“ ryšys su vilkiku_darbo_laikai
+        papildomi_map[(v, row["data"])] = {
             "ikr_laikas": ikr_laikas,
             "bdl":         bdl,
             "ldl":         ldl
         }
 
     # ==============================
-    # 9) Paruošiame stulpelį "cell_val":
-    #     – vienoje eilutėje: regiono_kodas iš krovinio (pvz. „LT5658“), 
-    #       toliau iškrovimo laikas arba "--", 
-    #       BDL arba "--", 
-    #       LDL arba "--"
-    #     – jei regiono nėra, langelis tiesiog tuščias
+    # 9) Paruošiame stulpelį "cell_val": 
+    #    – liks vienoje eilutėje: 
+    #      [vietos_kodas] [ikr_laikas or "--"] [bdl or "--"] [ldl or "--"]
+    #    – jeigu „vietos_kodas“ tuščias → grąžinam tuščią stringą
     # ==============================
-    def make_cell(vilkikas, data, vieta):
+    def make_cell(vilkikas, iskr_data, vieta):
         if not vieta:
-            return ""  # jei nėra regiono, rodome tuščią langelį
+            return ""  # jeigu nėra regiono, langelis tuščias
 
-        info = papildomi_map.get((vilkikas, data), {})
+        info = papildomi_map.get((vilkikas, iskr_data), {})
         parts = []
 
-        # 1) regiono kodas
+        # 1) regiono kodas (pvz. “IT10”)
         parts.append(vieta)
 
         # 2) iškrovimo laikas arba "--"
@@ -194,9 +204,9 @@ def show(conn, c):
 
     # ==============================
     # 10) Sukuriame pivot lentelę:
-    #      – index = vilkikas
-    #      – columns = data (pvz. '2025-06-05', '2025-06-06', …)
-    #      – values = cell_val
+    #       – index   = vilkikas
+    #       – columns = data (iškrovimo data, pvz. '2025-06-05')
+    #       – values  = cell_val
     # ==============================
     pivot_df = df_last.pivot(
         index="vilkikas",
@@ -205,14 +215,14 @@ def show(conn, c):
     )
 
     # ==============================
-    # 11) Uždengiame stulpelius tuščiomis reikšmėmis, jei kokios datos nebuvo df_last
+    # 11) Užtikriname, kad stulpeliai atitiktų visas datos reikšmes intervale
     # ==============================
     pivot_df = pivot_df.reindex(columns=date_strs, fill_value="")
 
     # ==============================
-    # 12) Filtruojame eilutes (vilkikus) pagal grupės logiką:
-    #      – Jei pasirinkta „Visi“, visiems vilkikams (iš vilkikai_all) paliekame tuščias eilutes tose datose, kurių nėra df_last
-    #      – Jei pasirinkta konkreti grupė, rodomi tik tie vilkikai, kuriems bent vienas įrašas yra df_last
+    # 12) Filtruojame pagal grupės logiką:
+    #       – jei "Visi" → atvaizduojam visus vilkikus (tuščiomis eilutėmis tiems be df_last)
+    #       – jei konkreti grupė → rodome tik vilkikus, turinčius df_last įrašą
     # ==============================
     if selected == "Visi":
         pivot_df = pivot_df.reindex(index=vilkikai_all, fill_value="")
@@ -220,13 +230,14 @@ def show(conn, c):
         pivot_df = pivot_df.reindex(index=df_last["vilkikas"].unique(), fill_value="")
 
     # ==============================
-    # 13) Paimame SA iš paskutinio įrašo lentelėje "vilkiku_darbo_laikai" kiekvienam vilkikui
-    #     – filtruojame taip pat pagal `data = ?`
+    # 13) Paimame SA (paskutinę reikšmę) iš vilkiku_darbo_laikai kiekvienam vilkikui:
+    #     – filtruojame pagal `data = pak_data` (tą pačią, kurią naudojome aukščiau)
     # ==============================
     sa_map = {}
     for v in pivot_df.index:
-        # ieškome įrašo, kur stulpelis "data" (tik data) sutampa su df_last["data"] to vilkiko
-        d_last = df_last.loc[df_last["vilkikas"] == v, "data"].values[0]
+        # reikia rasti pakrovimo datą, susietą su paskutine iškrovimo data
+        # t.y. iš df_last paimame pak_data to vilkiko
+        pak_d = df_last.loc[df_last["vilkikas"] == v, "pak_data"].values[0]
         row = c.execute(
             """
             SELECT sa
@@ -234,16 +245,17 @@ def show(conn, c):
             WHERE vilkiko_numeris = ? AND data = ?
             ORDER BY id DESC LIMIT 1
             """,
-            (v, d_last)
+            (v, pak_d)
         ).fetchone()
         sa_map[v] = row[0] if row and row[0] is not None else ""
 
     # ==============================
     # 14) Sukuriame indekso (eilutės) pavadinimą:
-    #     – „Vilkikas/Priekaba Vadybininkas SA“
-    #       • be tarpų aplink „/“
-    #       • po priekabos – tarpas + vadybininkas
-    #       • po vadybininko – tarpas + SA
+    #       “Vilkikas/Priekaba Vadybininkas SA”
+    #     – be tarpų aplink “/”
+    #     – jei priekaba yra, pridedame “/<priekaba>”
+    #     – jei vadybininkas yra, pridedame “ <vadybininkas>”
+    #     – jei SA yra, pridedame “ <SA>”
     # ==============================
     combined_index = []
     for v in pivot_df.index:
@@ -265,7 +277,8 @@ def show(conn, c):
     pivot_df.index.name = "Vilkikas/Priekaba Vadybininkas SA"
 
     # ==============================
-    # 15) Išvedame HTML lentelę per st.markdown
+    # 15) Generuojame HTML lentelę per st.markdown,
+    #     kad atvaizduotume „--“ vietoje trūkstamų laiko/BDL/LDL ir blank vietoje tuščių langelių.
     # ==============================
     html = "<table>\n"
     # 15.1) Antraštės eilutė
@@ -279,11 +292,10 @@ def show(conn, c):
     html += "  <tbody>\n"
     for idx in pivot_df.index:
         html += "    <tr>\n"
-        # pirma stulpelio ląstelė – indekso pavadinimas (su „SA“)
         html += f"      <td>{idx}</td>\n"
         for d in date_strs:
             val = pivot_df.at[idx, d]
-            # jeigu val == NaN arba blank, rodome tuščią langelį
+            # jei val = NaN arba blank, paliekiame tuščią
             if pd.isna(val) or str(val).strip() == "":
                 cell_html = ""
             else:
