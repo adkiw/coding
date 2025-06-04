@@ -51,6 +51,7 @@ def show(conn, c):
 
     # ==============================
     # 4) Iš lentelės "kroviniai" paimame įrašus su iškrovimo data šiame intervale
+    #    Naudojame date(iskrovimo_data), kad apdorotume ir atvejus, kai saugoma ir laikas
     # ==============================
     start_str = start_date.isoformat()
     end_str = end_date.isoformat()
@@ -59,11 +60,11 @@ def show(conn, c):
             vilkikas AS vilkikas,
             iskrovimo_salis AS salis,
             iskrovimo_regionas AS regionas,
-            iskrovimo_data AS data
+            date(iskrovimo_data) AS data
         FROM kroviniai
-        WHERE iskrovimo_data BETWEEN '{start_str}' AND '{end_str}'
+        WHERE date(iskrovimo_data) BETWEEN '{start_str}' AND '{end_str}'
           AND iskrovimo_data IS NOT NULL
-        ORDER BY vilkikas, iskrovimo_data
+        ORDER BY vilkikas, date(iskrovimo_data)
     """
     df = pd.read_sql_query(query, conn)
 
@@ -107,6 +108,7 @@ def show(conn, c):
     #    – iskrovimo_laikas
     #    – darbo_laikas (BDL)
     #    – likes_laikas (LDL)
+    #    Naudojame WHERE iskrovimo_data = ?, kad sutaptų su date(...) iš kroviniai.
     # ==============================
     papildomi_map = {}
     for _, row in df_last.iterrows():
@@ -116,7 +118,7 @@ def show(conn, c):
             """
             SELECT iskrovimo_laikas, darbo_laikas, likes_laikas
             FROM vilkiku_darbo_laikai
-            WHERE vilkiko_numeris = ? AND iskrovimo_data = ?
+            WHERE vilkiko_numeris = ? AND date(iskrovimo_data) = ?
             ORDER BY id DESC LIMIT 1
             """,
             (v, d)
@@ -126,7 +128,7 @@ def show(conn, c):
         else:
             ikr_laikas, bdl, ldl = None, None, None
 
-        # Jeigu None arba NaN, paverčiame tuščius stringus
+        # Jei None arba NaN, paverčiame tuščius stringus
         if ikr_laikas is None or (isinstance(ikr_laikas, float) and pd.isna(ikr_laikas)):
             ikr_laikas = ""
         else:
@@ -217,9 +219,9 @@ def show(conn, c):
             SELECT sa
             FROM vilkiku_darbo_laikai
             WHERE vilkiko_numeris = ?
-              AND sa IS NOT NULL
-            ORDER BY data DESC LIMIT 1
-            """, (v,)
+              AND date(iskrovimo_data) = ?
+            ORDER BY id DESC LIMIT 1
+            """, (v, df_last.loc[df_last["vilkikas"] == v, "data"].values[0])
         ).fetchone()
         sa_map[v] = row[0] if row and row[0] is not None else ""
 
