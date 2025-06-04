@@ -2,68 +2,102 @@
 
 import streamlit as st
 import pandas as pd
+import datetime
 
 def show(conn, c):
     st.title("DISPO – Planavimas")
 
-    # 1) Užkrauname visas ekspedicijos grupes (id, numeris, pavadinimas)
-    c.execute("SELECT id, numeris, pavadinimas FROM grupes ORDER BY numeris")
-    grupes = c.fetchall()  # sąrašas tuplų: (id, numeris, pavadinimas)
+    # ==============================
+    # 1) Suskaičiuojame norimą datų intervalą:
+    #    nuo vakar (today - 1) iki savaitės į priekį (today + 7)
+    # ==============================
+    today = datetime.date.today()
+    start_date = today - datetime.timedelta(days=1)
+    end_date = today + datetime.timedelta(days=7)
 
-    # Pasirinkimo langelis (streamlit selectbox)
-    group_options = ["Visi"] + [f"{numeris} – {pavadinimas}" for _, numeris, pavadinimas in grupes]
-    selected = st.selectbox("Pasirinkti ekspedicijos grupę", group_options)
+    # Generuojame sąrašą visų datų šiame intervale
+    # Pvz. [2025-06-04, 2025-06-05, ..., 2025-06-12]
+    date_list = [
+        start_date + datetime.timedelta(days=i)
+        for i in range((end_date - start_date).days + 1)
+    ]
+    # Pavertžiame datas į eilutes "YYYY-MM-DD" formatu, kad vėliau galėtume
+    # jas naudoti kaip stulpelių pavadinimus
+    date_strs = [d.isoformat() for d in date_list]
 
-    # 2) SQL: kiekvienam vilkikui paimti jo paskutinį 'iškrovimo' įrašą iš lentelės kroviniai
-    query = """
-        SELECT k.vilkikas AS vilkikas,
-               k.iskrovimo_regionas AS paskutinis_regionas,
-               k.iskrovimo_data AS paskutine_data
-        FROM kroviniai k
-        JOIN (
-            SELECT vilkikas AS v, MAX(iskrovimo_data) AS max_data
-            FROM kroviniai
-            WHERE iskrovimo_data IS NOT NULL
-            GROUP BY vilkikas
-        ) sub
-          ON k.vilkikas = sub.v
-         AND k.iskrovimo_data = sub.max_data
-        WHERE k.vilkikas IS NOT NULL
-        ORDER BY k.vilkikas
+    # ==============================
+    # 2) Ištraukiame visus vilkikų numerius,
+    #    kad turėtume visų galimų vilkikų aibę (net jei tam tikromis dienomis
+    #    planavimo lentelėje jiems nėra nei vieno įrašo)
+    # ==============================
+    c.execute("SELECT numeris FROM vilkikai ORDER BY numeris")
+    vilkikai_all = [row[0] for row in c.fetchall()]
+
+    # ==============================
+    # 3) Iš lentelės "kroviniai" surenkame įrašus tarp start_date ir end_date
+    #    (kur yra laukeliai iskrovimo_data, iskrovimo_regionas ir vilkikas)
+    # ==============================
+    # Pastaba: jeigu iskrovimo_data lauke saugomi ir laiko fragmentai,
+    # verta palikti palyginimą tik pagal datą. Bet jeigu tai grynai 'YYYY-MM-DD'
+    # formos tekstas, pakanka taip palyginti.
+    start_str = start_date.isoformat()
+    end_str = end_date.isoformat()
+
+    query = f"""
+        SELECT
+            vilkikas AS vilkikas,
+            iskrovimo_regionas AS regionas,
+            iskrovimo_data AS data
+        FROM kroviniai
+        WHERE iskrovimo_data BETWEEN '{start_str}' AND '{end_str}'
+          AND iskrovimo_data IS NOT NULL
+        ORDER BY vilkikas, iskrovimo_data
     """
     df = pd.read_sql_query(query, conn)
 
-    # 3) Jei pasirinkta tam tikra ekspedicijos grupė, filtruojame pagal regionus
-    if selected != "Visi":
-        # Išskiriame grupės numerį iki " – " (pvz. EKSP1)
-        numeris = selected.split(" – ")[0]
-
-        # Randame iš 'grupes' lentelės tą id, kur numeris == pasirinktas numeris
-        grupe_id = None
-        for gid, gnum, _ in grupes:
-            if gnum == numeris:
-                grupe_id = gid
-                break
-
-        if grupe_id is not None:
-            # Iš 'grupiu_regionai' lentelės surenkame regionų kodus
-            c.execute(
-                "SELECT regiono_kodas FROM grupiu_regionai WHERE grupe_id = ?",
-                (grupe_id,)
-            )
-            regionai = [row[0] for row in c.fetchall()]
-
-            # Filtruojame DataFrame pagal tai, kas matoma stulpelyje 'paskutinis_regionas'
-            df = df[df["paskutinis_regionas"].isin(regionai)]
-
-    # 4) Gautą DataFrame atvaizduojame streamlit'e
+    # ==============================
+    # 4) Jeigu lentelė tuščia (nėra jokių planuotų iškrovimų šiame intervale),
+    #    rodome info pranešimą ir nutraukiame.
+    # ==============================
     if df.empty:
-        st.info("Nėra duomenų pagal pasirinktą grupę.")
-    else:
-        # Pervadiname stulpelius, kad būtų aiškiau
-        df = df.rename(columns={
-            "vilkikas": "Vilkiko numeris",
-            "paskutinis_regionas": "Paskutinis iškrovimo regionas",
-            "paskutine_data": "Paskutinė iškrovimo data"
-        })
-        st.dataframe(df, use_container_width=True)
+        st.info("Šiame laikotarpyje nėra planuojamų iškrovimų.")
+        return
+
+    # ==============================
+    # 5) Paruošiame DataFrame 'pivot' tipo:
+    #    - eilutės: vilkikai
+    #    - stulpeliai: kiekviena data intervale
+    #    - reikšmės: paskirtas iškrovimo regionas tos dienos vilkikui
+    # ==============================
+    # Konvertuojame stulpelį "data" į datetime.date tipą, tada į tekstą YYYY-MM-DD
+    df["data"] = pd.to_datetime(df["data"]).dt.date.astype(str)
+
+    # Pivot lentelės kūrimas: index=vilkikas, columns=data, values=regionas
+    pivot_df = df.pivot(
+        index="vilkikas",
+        columns="data",
+        values="regionas"
+    )
+
+    # ==============================
+    # 6) Užpildome tuščias vietas (jei tam tikra diena vilkikui neturima įrašo)
+    #    paliekame tuščią string'ą
+    # ==============================
+    # Uždėkime pilną intervalą kaip stulpelius, net jei juose (kol kas) nėra duomenų
+    pivot_df = pivot_df.reindex(columns=date_strs, fill_value="")
+
+    # ==============================
+    # 7) Užtikriname, kad visų vilkikų numeriai būtų tarp eilučių (net jei kai kurie
+    #    neturėjo nė vieno įrašo šiame intervale)
+    # ==============================
+    pivot_df = pivot_df.reindex(index=vilkikai_all, fill_value="")
+
+    # ==============================
+    # 8) Pervadiname indekso pavadinimą į "Vilkiko numeris"
+    # ==============================
+    pivot_df.index.name = "Vilkiko numeris"
+
+    # ==============================
+    # 9) Išvedame rezultatus Streamlit lange
+    # ==============================
+    st.dataframe(pivot_df, use_container_width=True)
