@@ -4,28 +4,20 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, date
 
-# Privaloma – turi būti pačioje failo viršuje:
-st.set_page_config(
-    page_title="DISPO – Update",
-    layout="wide"
-)
-
 # ==============================
-# PAPILDOMAS CSS tam, kad visi stulpelių tekstai ir patys stulpeliai
-# nebūtų lūžinėjami (white-space: nowrap) ir būtų galimybė horizontaliai skrolintis.
+# 0) CSS stiliai su horizontalia juosta ir be eilučių lūžio
 # ==============================
 st.markdown("""
     <style>
-      /* Visa „aplink“ scroll-container bloką nebus lūžinama eilutė (viskas vienoje eilutėje) */
+      /* Sustabdyti eilutės lūžimą dideliais stulpeliais */
       .scroll-container {
         overflow-x: auto;
       }
-      /* Kadangi naudojame st.columns, kiekvienas stulpelis yra div.bloko viduje.
-         Taikome white-space:nowrap; visiems vaikams scroll-container blokui. */
+      /* Visi scroll-container vidiniai div'ai (t.y. st.columns blokai) nebūtų lūžinami */
       .scroll-container > div > div {
         white-space: nowrap !important;
       }
-      /* Sutrumpiname fontą, kad tilptų daugiau teksto */
+      /* Sutrumpiname fontą lentelės viduje */
       th, td, .stTextInput>div>div>input {
         font-size: 12px !important;
       }
@@ -94,7 +86,7 @@ def show(conn, c):
     params = vilkikai + [str(today)]
     kroviniai = c.execute(query, params).fetchall()
 
-    # 4) Parenkame vilkiko grupių ir ekspedicijos grupių žemėlapius
+    # 4) Paruošiame vilkiko grupių ir ekspedicijos grupių žemėlapius
     vilk_grupes = dict(c.execute("""
         SELECT v.numeris, g.pavadinimas
         FROM vilkikai v
@@ -108,16 +100,15 @@ def show(conn, c):
         LEFT JOIN grupes g ON d.grupe = g.pavadinimas
     """).fetchall())
 
-    # 5) Stulpelių antraščių plačiai (lygiai tiek, kad neužlūžtų, bet tilptų į scroll)
+    # 5) Stulpelių antraščių pločiai (tiek, kad netelpa į vieną ekraną be skrolo)
     col_widths = [1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 3]
 
-    # 6) Apvyniojame visą „row_cols“ generavimą scroll-container div'u,
-    # kad atsirastų horizontali slinktis, jei stulpelių per daug.
+    # 6) Apvyniojame visą „st.columns“ generavimą scroll-container div'u
     st.markdown("<div class='scroll-container'>", unsafe_allow_html=True)
 
     # 7) Iteruojame per visus krovinio įrašus ir atvaizduojame stulpelius
     for k in kroviniai:
-        # 7.1) Paimame paskutinį darbo įrašą (vilkiku_darbo_laikai)
+        # 7.1) Paimame paskutinį įrašą iš vilkiku_darbo_laikai
         darbo = c.execute("""
             SELECT sa, darbo_laikas, likes_laikas, created_at,
                    pakrovimo_statusas, pakrovimo_laikas, pakrovimo_data,
@@ -129,7 +120,7 @@ def show(conn, c):
             ORDER BY id DESC LIMIT 1
         """, (k[5], k[3])).fetchone()
 
-        # 7.2) Jeigu jau pažymėta Iškrauta ir data praeityje – praleidžiam
+        # 7.2) Jeigu jau pažymėta „Iškrauta“ ir data praeityje → praleidžiam
         if darbo and darbo[7] == "Iškrauta":
             try:
                 iskrov_data = pd.to_datetime(darbo[9]).date()
@@ -139,31 +130,30 @@ def show(conn, c):
             iskrov_data = None
 
         if iskrov_data and iskrov_data < today:
-            # Krovinys jau iškrautas ir tai senesnė data – jo neberodome
             continue
 
         # 7.3) Paruošiame rodomus ir redaguojamus laukus
-        created     = darbo[3] if darbo and darbo[3] else None
-        sa_in       = darbo[0] if darbo and darbo[0] else ""
-        bdl_in      = darbo[1] if darbo and darbo[1] else ""
-        ldl_in      = darbo[2] if darbo and darbo[2] else ""
-        pk_status   = darbo[4] if darbo and darbo[4] else ""
-        pk_laikas   = darbo[5] if darbo and darbo[5] else (str(k[7])[:5] if k[7] else "")
-        pk_data     = darbo[6] if darbo and darbo[6] else str(k[3])
-        ikr_status  = darbo[7] if darbo and darbo[7] else ""
-        ikr_laikas  = darbo[8] if darbo and darbo[8] else (str(k[9])[:5] if k[9] else "")
-        ikr_data    = darbo[9] if darbo and darbo[9] else str(k[4])
-        komentaras  = darbo[10] if darbo and darbo[10] else ""
-        trans_gr    = darbo[12] if darbo and darbo[12] else vilk_grupes.get(k[5], "")
-        eksp_gr     = darbo[13] if darbo and darbo[13] else eksp_grupes.get(k[0], "")
+        created    = darbo[3] if darbo and darbo[3] else None
+        sa_in      = darbo[0] if darbo and darbo[0] else ""
+        bdl_in     = darbo[1] if darbo and darbo[1] else ""
+        ldl_in     = darbo[2] if darbo and darbo[2] else ""
+        pk_status  = darbo[4] if darbo and darbo[4] else ""
+        pk_laikas  = darbo[5] if darbo and darbo[5] else (str(k[7])[:5] if k[7] else "")
+        pk_data    = darbo[6] if darbo and darbo[6] else str(k[3])
+        ikr_status = darbo[7] if darbo and darbo[7] else ""
+        ikr_laikas = darbo[8] if darbo and darbo[8] else (str(k[9])[:5] if k[9] else "")
+        ikr_data   = darbo[9] if darbo and darbo[9] else str(k[4])
+        komentaras = darbo[10] if darbo and darbo[10] else ""
+        trans_gr   = darbo[12] if darbo and darbo[12] else vilk_grupes.get(k[5], "")
+        eksp_gr    = darbo[13] if darbo and darbo[13] else eksp_grupes.get(k[0], "")
 
-        # 7.4) Sukuriame stulpelius
+        # 7.4) Kuriame stulpelius eilutę
         row_cols = st.columns(col_widths)
 
-        # „Save“ mygtukas
+        # 💾 „Save“ mygtukas
         save = row_cols[0].button("💾", key=f"save_{k[0]}")
 
-        # „Atnaujinta:“ (paskutinis created_at)
+        # „Atnaujinta“ (created_at)
         if created:
             laikas = pd.to_datetime(created)
             row_cols[1].markdown(
@@ -173,34 +163,34 @@ def show(conn, c):
         else:
             row_cols[1].markdown("<div style='padding:2px 6px;'>&nbsp;</div>", unsafe_allow_html=True)
 
-        # 7.5) Stabilūs laukai iš lentelės „kroviniai“
-        row_cols[2].write(str(k[5])[:7])              # Vilkikas
-        row_cols[3].write(str(k[6])[:7])              # Priekaba
-        row_cols[4].write(str(k[3]))                  # Pakrovimo data
+        # 7.5) Stacionarūs laukai (krovinio duomenys)
+        row_cols[2].write(str(k[5])[:7])       # Vilkikas
+        row_cols[3].write(str(k[6])[:7])       # Priekaba
+        row_cols[4].write(str(k[3]))           # Pakrovimo data
         row_cols[5].write(
             str(k[7])[:5] + (f" - {str(k[8])[:5]}" if k[8] else "")
-        )                                            # Pakrovimo laikas
+        )                                      # Pakrovimo laikas
         vieta_pk = f"{k[11] or ''}{k[12] or ''}"
-        row_cols[6].write(vieta_pk)                   # Pakrovimo vieta
-        row_cols[7].write(str(k[4]))                  # Iškrovimo data
+        row_cols[6].write(vieta_pk)            # Pakrovimo vieta
+        row_cols[7].write(str(k[4]))           # Iškrovimo data
         row_cols[8].write(
             str(k[9])[:5] + (f" - {str(k[10])[:5]}" if k[10] else "")
-        )                                            # Iškrovimo laikas
+        )                                      # Iškrovimo laikas
         vieta_ikr = f"{k[13] or ''}{k[14] or ''}"
-        row_cols[9].write(vieta_ikr)                  # Iškrovimo vieta
-        row_cols[10].write(str(k[15])[:5])            # Km
+        row_cols[9].write(vieta_ikr)           # Iškrovimo vieta
+        row_cols[10].write(str(k[15])[:5])     # Km
 
-        # 7.6) Grupės/Vadybininkai
-        row_cols[11].write(trans_gr)                  # Transporto grupė
+        # 7.6) Grupės / vadybininkai
+        row_cols[11].write(trans_gr)           # Transporto grupė
         tv = c.execute("SELECT vadybininkas FROM vilkikai WHERE numeris = ?", (k[5],)).fetchone()
-        row_cols[12].write(tv[0] if tv else "")        # Transporto vadybininkas
-        row_cols[13].write(str(k[16])[:7] if len(k)>16 else "")  # Ekspedicijos grupė
-        row_cols[14].write(str(k[17])[:7] if len(k)>17 else "")  # Ekspedicijos vadybininkas
+        row_cols[12].write(tv[0] if tv else "") # Transporto vadybininkas
+        row_cols[13].write(str(k[16])[:7] if len(k) > 16 else "")  # Ekspedicijos grupė
+        row_cols[14].write(str(k[17])[:7] if len(k) > 17 else "")  # Ekspedicijos vadybininkas
 
-        # 7.7) SA / BDL / LDL
-        row_cols[15].write(sa_in)                     # SA
-        row_cols[16].write(bdl_in)                    # BDL
-        row_cols[17].write(ldl_in)                    # LDL
+        # 7.7) SA / BDL / LDL iš paskutinio įrašo
+        row_cols[15].write(sa_in)              # SA
+        row_cols[16].write(bdl_in)             # BDL
+        row_cols[17].write(ldl_in)             # LDL
 
         # 7.8) „Edit“ laukai
         default_pk_date = datetime.now().date() if not pk_data else datetime.fromisoformat(pk_data).date()
