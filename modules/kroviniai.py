@@ -2,7 +2,7 @@
 
 import streamlit as st
 import pandas as pd
-from datetime import date, datetime, time
+from datetime import date, datetime
 
 def get_vieta(salis, regionas):
     if not salis:
@@ -72,7 +72,7 @@ def show(conn, c):
     eksped_dropdown = [""] + eksped_vadybininkai
 
     # ==============================
-    # 3) Sukuriame map: klientas → likutinis limitas
+    # 3) Sukuriame map: klientas → likutinis limitas ir VAT/COFACE info
     # ==============================
     df_klientai = pd.read_sql_query("SELECT pavadinimas, likes_limitas, vat_numeris, coface_limitas FROM klientai", conn)
     klientu_limitai = {row['pavadinimas']: row['likes_limitas'] for _, row in df_klientai.iterrows()}
@@ -105,7 +105,7 @@ def show(conn, c):
         if df.empty:
             st.info("Kol kas nėra krovinių.")
         else:
-            # Papildomi stulpeliai
+            # Papildomi stulpeliai: pakrovimo_vieta, iskrovimo_vieta, vadybininkai
             df["pakrovimo_vieta"] = df.apply(
                 lambda r: get_vieta(r.get('pakrovimo_salis', ''), r.get('pakrovimo_regionas', '')), axis=1
             )
@@ -115,7 +115,7 @@ def show(conn, c):
             df["transporto_vadybininkas"] = df["vilkikas"].map(vilk_vad_map).fillna("")
             df["atsakingas_vadybininkas"] = df["vilkikas"].map(vilk_vad_map).fillna("")
 
-            # Būsenos nustatymas
+            # Būsenos nustatymas pagal paskutinį įrašą iš vilkiku_darbo_laikai
             def get_busena(c, krovinys):
                 if not krovinys.get("vilkikas"):
                     return "Nesuplanuotas"
@@ -146,7 +146,7 @@ def show(conn, c):
             busenos = [get_busena(c, row) for _, row in df.iterrows()]
             df["busena"] = busenos
 
-            # Rodoma lentelė su filtravimo langeliais
+            # Rodoma lentelė su filtravimo langeliais viršuje
             FIELD_ORDER = [
                 "id", "busena", "pakrovimo_data", "iskrovimo_data",
                 "pakrovimo_vieta", "iskrovimo_vieta",
@@ -157,7 +157,7 @@ def show(conn, c):
             ]
             df_disp = df[FIELD_ORDER].fillna("")
 
-            # Filtravimo input langeliai
+            # Filtravimo įėjimai
             filter_cols = st.columns(len(df_disp.columns) + 1)
             for i, col in enumerate(df_disp.columns):
                 filter_cols[i].text_input(" ", key=f"f_{col}", label_visibility="collapsed")
@@ -169,7 +169,7 @@ def show(conn, c):
                 if v:
                     df_f = df_f[df_f[col].astype(str).str.contains(v, case=False, na=False)]
 
-            # Headeriai
+            # Antraštės su sutrumpintais pavadinimais
             HEADER_LABELS = {
                 "id": "ID", "busena": "Būsena", "pakrovimo_data": "Pakr. data",
                 "iskrovimo_data": "Iškr. data", "pakrovimo_vieta": "Pakr. vieta",
@@ -312,24 +312,24 @@ def show(conn, c):
 
         # Pakrovimo laikas nuo
         if is_new:
-            default_pk_nuo = time(8, 0)  # pvz., 08:00
+            default_pk_nuo = datetime.now().time()
         else:
             raw_nuo = data.get('pakrovimo_laikas_nuo', "")
             try:
                 default_pk_nuo = datetime.fromisoformat(raw_nuo).time()
             except:
-                default_pk_nuo = time(8, 0)
+                default_pk_nuo = datetime.now().time()
         pk_nuo = colB.time_input("  Laikas nuo", value=default_pk_nuo, key="pk_laikas_nuo")
 
         # Pakrovimo laikas iki
         if is_new:
-            default_pk_iki = time(17, 0)  # pvz., 17:00
+            default_pk_iki = datetime.now().time()
         else:
             raw_iki = data.get('pakrovimo_laikas_iki', "")
             try:
                 default_pk_iki = datetime.fromisoformat(raw_iki).time()
             except:
-                default_pk_iki = time(17, 0)
+                default_pk_iki = datetime.now().time()
         pk_iki = colB.time_input("  Laikas iki", value=default_pk_iki, key="pk_laikas_iki")
 
         # --- Stulpelis C: Iškrovimo duomenys ---
@@ -367,24 +367,24 @@ def show(conn, c):
 
         # Iškr. laikas nuo
         if is_new:
-            default_is_nuo = time(8, 0)
+            default_is_nuo = datetime.now().time()
         else:
             raw_is_nuo = data.get('iskrovimo_laikas_nuo', "")
             try:
                 default_is_nuo = datetime.fromisoformat(raw_is_nuo).time()
             except:
-                default_is_nuo = time(8, 0)
+                default_is_nuo = datetime.now().time()
         is_nuo = colC.time_input("  Laikas nuo", value=default_is_nuo, key="is_laikas_nuo")
 
         # Iškr. laikas iki
         if is_new:
-            default_is_iki = time(17, 0)
+            default_is_iki = datetime.now().time()
         else:
             raw_is_iki = data.get('iskrovimo_laikas_iki', "")
             try:
                 default_is_iki = datetime.fromisoformat(raw_is_iki).time()
             except:
-                default_is_iki = time(17, 0)
+                default_is_iki = datetime.now().time()
         is_iki = colC.time_input("  Laikas iki", value=default_is_iki, key="is_laikas_iki")
 
         # --- Stulpelis D: Eksp. vad., Transp vad., Km, Frachtas, Svoris, Pal., Komentaras ---
@@ -433,36 +433,7 @@ def show(conn, c):
             error = True
 
         # ==============================
-        # 8) Intervalų persidengimo patikrinimas
-        # ==============================
-        if not error and vilk:
-            new_pk = pk_data.isoformat()
-            new_ik = isk_data.isoformat()
-
-            # “exclude_clause” – jei redaguojame, pašaliname savą įrašą iš patikros
-            exclude_clause = ""
-            params = [vilk, new_pk, new_pk, new_ik, new_ik, new_pk, new_ik, new_pk, new_ik]
-            if not is_new:
-                exclude_clause = " AND id != ?"
-                params.append(sel)
-
-            overlap_q = f"""
-                SELECT id FROM kroviniai
-                WHERE vilkikas = ?
-                  AND (
-                      (date(pakrovimo_data) <= date(?) AND date(iskrovimo_data) >= date(?))
-                   OR (date(pakrovimo_data) <= date(?) AND date(iskrovimo_data) >= date(?))
-                   OR (date(?) <= date(iskrovimo_data) AND date(?) >= date(pakrovimo_data))
-                  )
-                  {exclude_clause}
-            """
-            ov = c.execute(overlap_q, tuple(params)).fetchone()
-            if ov:
-                st.error("❌ Negalima įvesti: to paties vilkiko krovinių intervalai persidengia.")
-                error = True
-
-        # ==============================
-        # 9) Klientų limitų patikrinimas
+        # 8) Klientų limitų patikrinimas
         # ==============================
         if not error and klientas:
             vat_of_client, coface_of_client = klientu_vat.get(klientas, ("", 0.0))
@@ -494,7 +465,7 @@ def show(conn, c):
                     error = True
 
         # ==============================
-        # 10) Jei klaidų nėra – INSERT arba UPDATE
+        # 9) Jei klaidų nėra – INSERT arba UPDATE lentelėje „kroviniai“
         # ==============================
         if not error:
             vals = {
@@ -524,7 +495,7 @@ def show(conn, c):
                 'svoris': sv_int,
                 'paleciu_skaicius': pal_int,
                 'saskaitos_busena': sask_busena,
-                'busena': ""  # galėsite nustatyti pagal vilkiku_darbo_laikai, jei reikia
+                'busena': ""  # pas jus galima vėliau nustatyti per vilkiku_darbo_laikai
             }
 
             try:
@@ -572,5 +543,4 @@ def show(conn, c):
                 st.error(f"❌ Klaida: {e}")
 
         # Net jei įvyko klaidų, forma lieka atidaryta, kad vartotojas galėtų taisyti
-        st.form_submit_button(" ")  # „dummy“ mygtukas, reikalingas formos veikimui
-
+        st.form_submit_button(" ")  # slaptas mygtukas dėl formos veikimo
