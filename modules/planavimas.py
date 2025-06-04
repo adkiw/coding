@@ -8,12 +8,22 @@ def show(conn, c):
     st.title("DISPO – Planavimas")
 
     # ==============================
+    # 0) CSS klasė “tiny” norint mažesniu šriftu parašyti “nėra”
+    # ==============================
+    st.markdown("""
+    <style>
+    .tiny { font-size:10px; color:#888; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { border:1px solid #ddd; padding:4px; vertical-align: top; text-align:center; }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # ==============================
     # 1) Užkrauname visas ekspedicijos grupes (id, numeris, pavadinimas)
     # ==============================
     c.execute("SELECT id, numeris, pavadinimas FROM grupes ORDER BY numeris")
     grupes = c.fetchall()  # kiekvienas: (id, numeris, pavadinimas)
 
-    # Paruošiame pasirinkimo laukelį grupių filtravimui
     group_options = ["Visi"] + [f"{numeris} – {pavadinimas}" for _, numeris, pavadinimas in grupes]
     selected = st.selectbox("Pasirinkti ekspedicijos grupę", group_options)
 
@@ -58,7 +68,6 @@ def show(conn, c):
     """
     df = pd.read_sql_query(query, conn)
 
-    # Jei nėra jokių įrašų šiame intervale, rodome pranešimą ir išeiname
     if df.empty:
         st.info("Šiame laikotarpyje nėra planuojamų iškrovimų.")
         return
@@ -68,8 +77,6 @@ def show(conn, c):
     # ==============================
     df["salis"] = df["salis"].fillna("").astype(str)
     df["regionas"] = df["regionas"].fillna("").astype(str)
-
-    # Sukuriame stulpelį "vietos_kodas" = "salis"+"regionas", pvz. "IT10"
     df["data"] = pd.to_datetime(df["data"]).dt.date.astype(str)
     df["vietos_kodas"] = df["salis"] + df["regionas"]
 
@@ -91,10 +98,8 @@ def show(conn, c):
             )
             regionai = [row[0] for row in c.fetchall()]
 
-            # Filtruojame: vietos_kodas turi prasidėti nuo bent vieno regiono kodo
             df = df[df["vietos_kodas"].apply(lambda x: any(x.startswith(r) for r in regionai))]
 
-    # Jei po grupės filtravimo nebeliko įrašų, rodome pranešimą ir išeiname
     if df.empty:
         st.info("Pasirinktoje ekspedicijos grupėje nėra planuojamų iškrovimų per šį laikotarpį.")
         return
@@ -110,7 +115,6 @@ def show(conn, c):
     #     – darbo_laikas (BDL)
     #     – likes_laikas (LDL)
     # ==============================
-    # Paruošiame žemėlapį: (vilkikas, data) → (ikr_laikas, bdl, ldl)
     papildomi_map = {}
     for idx, row in df_last.iterrows():
         v = row["vilkikas"]
@@ -129,7 +133,7 @@ def show(conn, c):
         else:
             ikr_laikas, bdl, ldl = None, None, None
 
-        # Pašaliname galimas NaN, None (paverčiame į tuščią eilutę)
+        # Jei None arba NaN, paverčiame tuščia eilute
         if ikr_laikas is None or (isinstance(ikr_laikas, float) and pd.isna(ikr_laikas)):
             ikr_laikas = ""
         if bdl is None or (isinstance(bdl, float) and pd.isna(bdl)):
@@ -144,33 +148,43 @@ def show(conn, c):
         }
 
     # ==============================
-    # 9) Paruošiame stulpelį "cell_val": vienoje eilutėje:
-    #     {vietos_kodas} {ikr_laikas} {bdl} {ldl}
-    #     – jeigu kuri nors reikšmė tuščia, ją tiesiog praleidžiame
+    # 9) Paruošiame stulpelį "cell_val":
+    #     – vienoje eilutėje: {vietos_kodas} {ikr_laikas_or_nėra} {bdl_or_nėra} {ldl_or_nėra}
+    #     – jeigu regionas tuščias, viskas tuščia
+    #     – jei regionas yra, bet laiko/BDL/LDL neliko, užrašome "nėra" mažyčiu šriftu
     # ==============================
     def make_cell(vilkikas, data, vieta):
+        if not vieta:
+            return ""  # jeigu nėra regiono, langelis tuščias
+
         info = papildomi_map.get((vilkikas, data), {})
         parts = []
-        # Pridedame vietos kodą (jeigu yra)
-        if vieta:
-            parts.append(vieta)
-        # Pridedame iskrovimo laiką (jeigu yra)
+
+        # Regiono kodas visada dedamas pirmas
+        parts.append(vieta)
+
+        # Iškr. laikas arba "nėra"
         ikr = info.get("ikr_laikas", "")
         if ikr:
             parts.append(ikr)
-        # Pridedame BDL (jeigu yra)
+        else:
+            parts.append("<span class='tiny'>nėra</span>")
+
+        # BDL arba "nėra"
         bdl_val = info.get("bdl", "")
         if bdl_val:
             parts.append(bdl_val)
-        # Pridedame LDL (jeigu yra)
+        else:
+            parts.append("<span class='tiny'>nėra</span>")
+
+        # LDL arba "nėra"
         ldl_val = info.get("ldl", "")
         if ldl_val:
             parts.append(ldl_val)
+        else:
+            parts.append("<span class='tiny'>nėra</span>")
 
-        # Jeigu visos dalys tuščios, grąžiname tuščią
-        if not parts:
-            return ""
-        # Sujungiame tarpu
+        # Sujungiame tarpu, bet dalys 4: regionas, ikr, bdl, ldl
         return " ".join(parts)
 
     df_last["cell_val"] = df_last.apply(
@@ -188,14 +202,14 @@ def show(conn, c):
     )
 
     # ==============================
-    # 11) Užtikriname, kad stulpeliai būtų pilnai pagal datas
+    # 11) Užtikriname, kad stulpeliai būtų pilni pagal datas
     # ==============================
     pivot_df = pivot_df.reindex(columns=date_strs, fill_value="")
 
     # ==============================
     # 12) Filtruojame eilutes pagal grupės logiką:
-    #     – Jei "Visi": rodomi visi vilkikai (tuščios eilutės tiems be įrašų)
-    #     – Jei kita grupė: rodomi tik tie vilkikai, kurių yra įrašas df_last
+    #     – Jei "Visi": rodomi visi vilkikai (tuščiomis eilutėmis tiems be įrašų)
+    #     – Jei kita grupė: rodomi tik tie vilkikai, kurių df_last yra bent vienas įrašas
     # ==============================
     if selected == "Visi":
         pivot_df = pivot_df.reindex(index=vilkikai_all, fill_value="")
@@ -221,7 +235,6 @@ def show(conn, c):
     # ==============================
     # 14) Sukuriame naują indekso stulpelį:
     #     "Vilkikas/Priekaba Vadybininkas SA"
-    #     – be tarpų aplink "/", po priekabos tarpas, po vadybininko tarpas
     # ==============================
     combined_index = []
     for v in pivot_df.index:
@@ -229,14 +242,11 @@ def show(conn, c):
         vad = vadybininkas_map.get(v, "")
         sa = sa_map.get(v, "")
 
-        # Vilkikas/Priekaba
         label = v
         if priek:
             label += f"/{priek}"
-        # Po priekabos – tarpas + vadybininkas
         if vad:
             label += f" {vad}"
-        # Po vadybininko – tarpas + SA
         if sa:
             label += f" {sa}"
 
@@ -246,6 +256,27 @@ def show(conn, c):
     pivot_df.index.name = "Vilkikas/Priekaba Vadybininkas SA"
 
     # ==============================
-    # 15) Išvedame lentelę Streamlit'e
+    # 15) Išvedame HTML lentelę per st.markdown,
+    #     kad atvaizduotų <span class="tiny">nėra</span>
     # ==============================
-    st.dataframe(pivot_df, use_container_width=True)
+    html = "<table>\n"
+    # Antraštės
+    html += "  <thead>\n    <tr>\n"
+    html += "      <th>Vilkikas/Priekaba Vadybininkas SA</th>\n"
+    for d in date_strs:
+        html += f"      <th>{d}</th>\n"
+    html += "    </tr>\n  </thead>\n"
+    # Turinio eilutės
+    html += "  <tbody>\n"
+    for idx in pivot_df.index:
+        html += "    <tr>\n"
+        html += f"      <td>{idx}</td>\n"
+        for d in date_strs:
+            val = pivot_df.at[idx, d]
+            # Jei langelis tuščias, tiesiog paliekame tuščią
+            cell_html = val if val else ""
+            html += f"      <td>{cell_html}</td>\n"
+        html += "    </tr>\n"
+    html += "  </tbody>\n</table>"
+
+    st.markdown(html, unsafe_allow_html=True)
