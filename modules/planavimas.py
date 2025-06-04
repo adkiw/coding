@@ -123,7 +123,7 @@ def show(conn, c):
     # df_last turi stulpelius: vilkikas, salis, regionas, data (iškrovimo), pak_data (pakrovimo)
 
     # ==============================
-    # 8) Iš lentelės "vilkiku_darbo_laikai" paimame:
+    # 8) Iš lentelės "vilkiku_darbo_laikai" paimame papildomus laukus:
     #    – iškrovimo_laikas („iskrovimo_laikas“)
     #    – darbo_laikas    („darbo_laikas“)
     #    – likes_laikas    („likes_laikas“)
@@ -224,7 +224,7 @@ def show(conn, c):
     pivot_df = pivot_df.reindex(columns=date_strs, fill_value="")
 
     # ==============================
-    # 12) Rodyti tik vilkikus, turinčius „df_last“ įrašą (t.y. tie, kurie iškrauna per du savaites)
+    # 12) Rodyti tik vilkikus, turinčius „df_last“ įrašą (t. y. tie, kurie iškrauna per dvi savaites)
     # ==============================
     pivot_df = pivot_df.reindex(index=df_last["vilkikas"].unique(), fill_value="")
 
@@ -279,7 +279,7 @@ def show(conn, c):
     html = "<div class='scroll-container'><table>\n"
     # 15.1) Antraštės eilutė
     html += "  <thead>\n    <tr>\n"
-    html += "      <th>Vilkikas/Priekaba Vadybininkas SA</th>\n"
+    html += "      <th title='Vilkikas/Priekaba Vadybininkas SA'>Vilkikas/Priekaba Vadybininkas SA</th>\n"
     for d in date_strs:
         html += f"      <th>{d}</th>\n"
     html += "    </tr>\n  </thead>\n"
