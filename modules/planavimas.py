@@ -105,32 +105,38 @@ def show(conn, c):
         return
 
     # ==============================
-    # 7) Pivot lentelės kūrimas:
+    # 7) Pasirenkame kiekvienam vilkikui tik paskutinį (didžiausią) įvykį šiame intervale
+    # ==============================
+    df_last = df.loc[df.groupby("vilkikas")["data"].idxmax()].copy()
+
+    # ==============================
+    # 8) Pivot lentelės kūrimas pagal paskutinius įrašus:
     #    index = vilkikas, columns = data, values = vietos_kodas
     # ==============================
-    pivot_df = df.pivot(
+    pivot_df = df_last.pivot(
         index="vilkikas",
         columns="data",
         values="vietos_kodas"
     )
 
     # ==============================
-    # 8) Užtikriname, kad pivot lentelė turi VISAS datas kaip stulpelius
+    # 9) Užtikriname, kad pivot lentelė turi VISAS datas kaip stulpelius
     # ==============================
     pivot_df = pivot_df.reindex(columns=date_strs, fill_value="")
 
     # ==============================
-    # 9) Filtruojame eilutes pagal tai, ar vilkikas egzistuoja df po filtravimo:
-    #    - Jei grupė "Visi" – rodomi visi vilkikai (net jei neturi įrašų)
-    #    - Jei kita grupė – tik tie vilkikai, kurių pivot eilutėje bent vienas ne tuščias langelis
+    # 10) Filtruojame eilutes pagal tai, ar vilkikas egzistuoja df_last:
+    #    - Jei grupė "Visi" – rodomi visi vilkikai (tuščiomis eilutėmis tiems be įrašų)
+    #    - Jei kita grupė – rodomi tik vilkikai, kurių df_last yra bent vienas įrašas
     # ==============================
     if selected == "Visi":
         pivot_df = pivot_df.reindex(index=vilkikai_all, fill_value="")
     else:
-        pivot_df = pivot_df.dropna(how="all", subset=date_strs)
+        # df_last turi tik tuos vilkikus, kurie atitiko filtrą, tad tiesiog paliekame esamus
+        pivot_df = pivot_df.reindex(index=df_last["vilkikas"].unique(), fill_value="")
 
     # ==============================
-    # 10) Paimame SA iš paskutinio "vilkiku_darbo_laikai" įrašo kiekvienam vilkikui
+    # 11) Paimame SA iš paskutinio "vilkiku_darbo_laikai" įrašo kiekvienam vilkikui
     # ==============================
     sa_map = {}
     for v in pivot_df.index:
@@ -146,7 +152,7 @@ def show(conn, c):
         sa_map[v] = row[0] if row and row[0] else ""
 
     # ==============================
-    # 11) Sukuriame naują indekso stulpelį:
+    # 12) Sukuriame naują indekso stulpelį:
     #     "Vilkikas/Priekaba Vadybininkas SA"
     # - Tarp vilkiko ir priekabos nėra tarpų aplink "/"
     # - Po priekabos seka tarpas, tada vadybininkas, tada tarpas ir SA
@@ -176,6 +182,6 @@ def show(conn, c):
     pivot_df.index.name = "Vilkikas/Priekaba Vadybininkas SA"
 
     # ==============================
-    # 12) Išvedame lentelę Streamlit'e
+    # 13) Išvedame lentelę Streamlit'e
     # ==============================
     st.dataframe(pivot_df, use_container_width=True)
