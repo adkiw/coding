@@ -14,32 +14,27 @@ TAUTYBES = [
 ]
 
 def show(conn, c):
-    # 1) Pakeičiame antraštę
-    st.title("Vairuotojų valdymas")
-
-    # 2) Užtikriname, kad lentelėje 'vairuotojai' būtų reikiami stulpeliai
+    # 1) Užtikrinkime, kad 'vairuotojai' lentelėje būtų reikalingi stulpeliai
     existing = [r[1] for r in c.execute("PRAGMA table_info(vairuotojai)").fetchall()]
     extras = {
         'vardas': 'TEXT',
         'pavarde': 'TEXT',
         'gimimo_metai': 'TEXT',
         'tautybe': 'TEXT',
-        'priskirtas_vilkikas': 'TEXT'
     }
     for col, typ in extras.items():
         if col not in existing:
             c.execute(f"ALTER TABLE vairuotojai ADD COLUMN {col} {typ}")
     conn.commit()
 
-    # 3) Surenkame informaciją apie tai, kam kokį vilkiką priskyrė vilkikų modulis
-    #    Pvz., vilkikai.vairuotojai saugo vardus kaip "Vardas Pavardė"
+    # 2) Surenkame informaciją apie tai, kam kokį vilkiką priskyrė vilkikų modulis
     driver_to_vilk = {}
     for numeris, drv_str in c.execute("SELECT numeris, vairuotojai FROM vilkikai").fetchall():
         if drv_str:
             for name in drv_str.split(', '):
                 driver_to_vilk[name] = numeris
 
-    # 4) Inicijuojame session_state
+    # 3) Inicijuojame sesijos būseną
     if 'selected_vair' not in st.session_state:
         st.session_state.selected_vair = None
 
@@ -54,7 +49,7 @@ def show(conn, c):
 
     sel = st.session_state.selected_vair
 
-    # 5) Redagavimo forma, jei pasirinktame esamas vairuotojas
+    # 4) Redagavimo forma: nėra „priskirtas_vilkikas“ lauko
     if sel not in (None, 0):
         df_sel = pd.read_sql_query(
             "SELECT * FROM vairuotojai WHERE id = ?", conn, params=(sel,)
@@ -107,14 +102,14 @@ def show(conn, c):
                     c.execute(
                         """
                         UPDATE vairuotojai
-                        SET vardas=?, pavarde=?, gimimo_metai=?, tautybe=?
-                        WHERE id=?
+                        SET vardas = ?, pavarde = ?, gimimo_metai = ?, tautybe = ?
+                        WHERE id = ?
                         """,
                         (
                             st.session_state.vardas,
                             st.session_state.pavarde,
                             st.session_state.gim_data.isoformat()
-                            if st.session_state.gim_data else '',
+                            if st.session_state.gim_data else "",
                             st.session_state.tautybe.split("(")[-1][:-1]
                             if "(" in st.session_state.tautybe else st.session_state.tautybe,
                             sel
@@ -127,7 +122,7 @@ def show(conn, c):
                     st.error(f"❌ Klaida: {e}")
         return
 
-    # 6) Naujo vairuotojo forma
+    # 5) Naujo vairuotojo forma
     if sel == 0:
         with st.form("new_form", clear_on_submit=True):
             vardas = st.text_input("Vardas", key="vardas")
@@ -163,7 +158,7 @@ def show(conn, c):
                             st.session_state.vardas,
                             st.session_state.pavarde,
                             st.session_state.gim_data.isoformat()
-                            if st.session_state.gim_data else '',
+                            if st.session_state.gim_data else "",
                             st.session_state.tautybe.split("(")[-1][:-1]
                             if "(" in st.session_state.tautybe else st.session_state.tautybe
                         )
@@ -175,54 +170,54 @@ def show(conn, c):
                     st.error(f"❌ Klaida: {e}")
         return
 
-    # 7) Vairuotojų sąrašas
+    # 6) Vairuotojų sąrašas
     df = pd.read_sql_query("SELECT * FROM vairuotojai", conn)
     if df.empty:
         st.info("ℹ️ Nėra vairuotojų.")
         return
 
-    # 7.1) Virš sąrašo mygtukas „Pridėti vairuotoją“ per visą plotį
+    # 6.1) „Pridėti vairuotoją“ mygtukas per visą plotį, rodome virš filtrų
     st.button("➕ Pridėti vairuotoją", on_click=new, use_container_width=True)
 
-    # 7.2) Paruošiam duomenis rodymui: visi None/NaN → ''
+    # 6.2) Paruošiame duomenis rodymui: visus None/NaN pakeičiame į tuščias eilutes
     df = df.fillna('')
-    df_disp = df.copy()
+    df_disp = df[['vardas', 'pavarde', 'gimimo_metai', 'tautybe']].copy()
     df_disp.rename(
         columns={
+            'vardas': 'Vardas',
+            'pavarde': 'Pavardė',
             'gimimo_metai': 'Gimimo data',
             'tautybe': 'Tautybė'
         },
         inplace=True
     )
 
-    # 7.3) Pridedame stulpelį „Priskirtas vilkikas“ pagal vilkikų modulio duomenis
+    # 6.3) Pridedame stulpelį „Priskirtas vilkikas“ pagal vilkikų modulio duomenis
     assigned = []
     for _, row in df.iterrows():
         name = f"{row['vardas']} {row['pavarde']}"
-        assigned.append(driver_to_vilk.get(name, ''))
+        assigned.append(driver_to_vilk.get(name, ""))
     df_disp['Priskirtas vilkikas'] = assigned
 
-    # 7.4) Filtravimo laukai
+    # 6.4) Filtravimo laukai (t.y. filtro tekstiniai įvesties langeliai)
     filter_cols = st.columns(len(df_disp.columns) + 1)
     for i, col in enumerate(df_disp.columns):
         filter_cols[i].text_input(col, key=f"f_{col}")
-    filter_cols[-1].write("")
+    filter_cols[-1].write("")  # tuščias stulpelis filtrui, be įvesties
 
     df_filt = df_disp.copy()
     for col in df_disp.columns:
         val = st.session_state.get(f"f_{col}", "")
         if val:
-            df_filt = df_filt[
-                df_filt[col].astype(str).str.contains(val, case=False, na=False)
-            ]
+            df_filt = df_filt[df_filt[col].astype(str).str.contains(val, case=False, na=False)]
 
-    # 7.5) Vienintelis lentelės antraštės blokas PO filtrų
+    # 6.5) ČIA – vienintelis lentelės antraštės blokas PO filtrų
     hdr = st.columns(len(df_filt.columns) + 1)
     for i, col in enumerate(df_filt.columns):
         hdr[i].markdown(f"**{col}**")
     hdr[-1].markdown("**Veiksmai**")
 
-    # 7.6) Lentelės eilutės su mygtuku redagavimui
+    # 6.6) Lentelės eilutės su redagavimo mygtuku
     for _, row in df_filt.iterrows():
         row_cols = st.columns(len(df_filt.columns) + 1)
         for i, col in enumerate(df_filt.columns):
@@ -234,7 +229,7 @@ def show(conn, c):
             args=(row['id'],)
         )
 
-    # 7.7) Eksportas į CSV
+    # 6.7) Eksportas į CSV
     csv = df.to_csv(index=False, sep=';').encode('utf-8')
     st.download_button(
         label="💾 Eksportuoti kaip CSV",
