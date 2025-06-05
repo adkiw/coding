@@ -1,3 +1,4 @@
+[media pointer="file-service://file-Kj2crdQkyu96wQUr6pEmF8"]
 import streamlit as st
 import pandas as pd
 
@@ -52,28 +53,20 @@ def show(conn, c):
             "SELECT id, pavadinimas, salis, regionas, miestas, likes_limitas AS limito_likutis FROM klientai",
             conn
         )
-
         # Filters above headers
         filter_cols = st.columns(len(df.columns) + 1)
         for i, col in enumerate(df.columns):
             filter_cols[i].text_input(f"🔍 {col}", key=f"f_{col}")
         filter_cols[-1].write("")
-
-        # Apply filters
         for col in df.columns:
             val = st.session_state.get(f"f_{col}", "")
             if val:
                 df = df[df[col].astype(str).str.contains(val, case=False, na=False)]
-
-        # ---- Replace default header row with a green background bar ----
-        # Build a green header bar using HTML/CSS
-        header_html = "<div style='display:flex; background-color:#ccffcc; padding:8px;'>"
-        for col in df.columns:
-            header_html += f"<div style='flex:1; text-align:center; font-weight:bold;'>{col}</div>"
-        header_html += "<div style='flex:1; text-align:center; font-weight:bold;'>Veiksmai</div>"
-        header_html += "</div>"
-        st.markdown(header_html, unsafe_allow_html=True)
-
+        # Header row
+        hdr = st.columns(len(df.columns) + 1)
+        for i, col in enumerate(df.columns):
+            hdr[i].markdown(f"**{col}**")
+        hdr[-1].markdown("**Veiksmai**")
         # Data rows with spacing
         for _, row in df.iterrows():
             row_cols = st.columns(len(df.columns) + 1)
@@ -82,9 +75,7 @@ def show(conn, c):
             row_cols[-1].button(
                 "✏️", key=f"edit_{row['id']}", on_click=start_edit, args=(row['id'],)
             )
-            # Add a bit of vertical space between rows
             st.markdown("<div style='height:1cm'></div>", unsafe_allow_html=True)
-
         return
 
     # 5. Detail / new form
@@ -299,7 +290,7 @@ def show(conn, c):
             if new_liks < 0:
                 new_liks = 0.0
 
-            # Update all rows where vat_numeris = vat
+            # Update všetky rows where vat_numeris = vat
             c.execute("""
                 UPDATE klientai
                 SET coface_limitas = ?, musu_limitas = ?, likes_limitas = ?
@@ -310,4 +301,4 @@ def show(conn, c):
             st.success("✅ Duomenys įrašyti ir limitai atnaujinti visiems su tuo pačiu VAT numeriu.")
             clear_selection()
         except Exception as e:
-            st.error(f"❌ Klaida: {e}")
+            st.error(f"❌ Klaida: {e}") 
