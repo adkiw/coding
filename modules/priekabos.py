@@ -13,8 +13,8 @@ def show(conn, c):
         'marke': 'TEXT',
         'pagaminimo_metai': 'TEXT',
         'tech_apziura': 'TEXT',
-        'draudimas': 'TEXT',
-        'priskirtas_vilkikas': 'TEXT'
+        'draudimas': 'TEXT'
+        # Nebereikalingas 'priskirtas_vilkikas' stulpelis, nes jį gausime iš vilkikai modulyje
     }
     for col, typ in extras.items():
         if col not in existing:
@@ -84,8 +84,12 @@ def show(conn, c):
                 key="draud_date"
             )
 
-            # 5.3) Priskirtas vilkikas – tik atvaizdavimas (neleidžiame keisti)
-            pv = st.text_input("Priskirtas vilkikas", value=(row['priskirtas_vilkikas'] or ""), disabled=True)
+            # 5.3) Priskirtas vilkikas – skaitome iš vilkikai lentelės
+            assigned_vilk = c.execute(
+                "SELECT numeris FROM vilkikai WHERE priekaba = ?", (row['numeris'],)
+            ).fetchone()
+            pv = assigned_vilk[0] if assigned_vilk else ""
+            st.text_input("Priskirtas vilkikas", value=pv, disabled=True)
 
             col1, col2 = st.columns(2)
             save = col1.form_submit_button("💾 Išsaugoti")
@@ -157,7 +161,7 @@ def show(conn, c):
         st.info("ℹ️ Nėra priekabų.")
         return
 
-    # 7.1) Paruošiame rodymui: pakeičiame None → ""
+    # 7.1) Paruošiame rodymui: None → ""
     df = df.fillna('')
     df_disp = df.copy()
     df_disp.rename(
@@ -169,7 +173,17 @@ def show(conn, c):
         inplace=True
     )
 
-    # 7.2) Apskaičiuojame kiek dienų iki tech apžiūros ir draudimo
+    # 7.2) Pridedame stulpelį "Priskirtas vilkikas" pagal vilkikai modulį
+    assigned_list = []
+    for _, row in df.iterrows():
+        prn = row['numeris']
+        assigned_vilk = c.execute(
+            "SELECT numeris FROM vilkikai WHERE priekaba = ?", (prn,)
+        ).fetchone()
+        assigned_list.append(assigned_vilk[0] if assigned_vilk else "")
+    df_disp['Priskirtas vilkikas'] = assigned_list
+
+    # 7.3) Apskaičiuojame kiek dienų iki tech apžiūros ir draudimo
     df_disp['Liko iki tech apžiūros'] = df_disp['tech_apziura'].apply(
         lambda x: (date.fromisoformat(x) - date.today()).days if x else ''
     )
@@ -177,7 +191,7 @@ def show(conn, c):
         lambda x: (date.fromisoformat(x) - date.today()).days if x else ''
     )
 
-    # 7.3) Filtravimo laukai (tik placeholder, be jokių headerių virš jų)
+    # 7.4) Filtravimo laukai (tik placeholder, be jokių headerių virš jų)
     filter_cols = st.columns(len(df_disp.columns) + 1)
     for i, col in enumerate(df_disp.columns):
         filter_cols[i].text_input(label="", placeholder=col, key=f"f_{col}")
@@ -191,7 +205,7 @@ def show(conn, c):
                 df_filt[col].astype(str).str.lower().str.startswith(val.lower())
             ]
 
-    # 7.4) Lentelės eilutės su redagavimo mygtuku (be headerių po filtrų)
+    # 7.5) Lentelės eilutės su redagavimo mygtuku (be headerių po filtrų)
     for _, row in df_filt.iterrows():
         row_cols = st.columns(len(df_filt.columns) + 1)
         for i, col in enumerate(df_filt.columns):
@@ -203,7 +217,7 @@ def show(conn, c):
             args=(row['id'],)
         )
 
-    # 7.5) Eksportas į CSV
+    # 7.6) Eksportas į CSV
     csv = df.to_csv(index=False, sep=';').encode('utf-8')
     st.download_button(
         label="💾 Eksportuoti kaip CSV",
