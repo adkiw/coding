@@ -131,7 +131,7 @@ def show(conn, c):
                     df_filt[col].astype(str).str.lower().str.startswith(val.lower())
                 ]
 
-        # 6.6) Table rows with edit buttons (no header block here)
+        # 6.6) Table rows with edit buttons (no header here)
         for _, row in df_filt.iterrows():
             row_cols = st.columns(len(df_filt.columns) + 1)
             for i, col in enumerate(df_filt.columns):
