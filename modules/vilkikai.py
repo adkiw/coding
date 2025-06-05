@@ -72,15 +72,40 @@ def show(conn, c):
             sel_priek = st.selectbox("Pasirinkite priekabą", pr_opts)
             upd = st.form_submit_button("💾 Išsaugoti")
         if upd and sel_vilk:
+            # 6.1.a) Parse selected trailer number (prn)
             prn = None
             if sel_priek and (sel_priek.startswith("🟢") or sel_priek.startswith("🔴")):
                 parts = sel_priek.split(" ", 1)
                 if len(parts) > 1:
                     prn = parts[1]
-            c.execute("UPDATE vilkikai SET priekaba = ? WHERE numeris = ?", (prn, sel_vilk))
-            conn.commit()
-            st.success(f"✅ Priekaba {prn or '(tuščia)'} priskirta {sel_vilk}.")
 
+            # 6.1.b) Get current trailer of sel_vilk (could be empty string)
+            cur_row = c.execute(
+                "SELECT priekaba FROM vilkikai WHERE numeris = ?", (sel_vilk,)
+            ).fetchone()
+            cur_trailer = cur_row[0] if cur_row else ""
+
+            # 6.1.c) Identify if prn is currently assigned to another truck
+            other_row = c.execute(
+                "SELECT numeris, priekaba FROM vilkikai WHERE priekaba = ?", (prn,)
+            ).fetchone()
+
+            # 6.1.d) Swap or reassign logic
+            if other_row:
+                other_truck = other_row[0]
+                # If the selected truck already had a trailer, swap:
+                #   set other_truck.priekaba = cur_trailer (can be empty)
+                c.execute(
+                    "UPDATE vilkikai SET priekaba = ? WHERE numeris = ?",
+                    (cur_trailer or "", other_truck)
+                )
+            # Finally, assign new trailer prn to sel_vilk (prn may be None)
+            c.execute(
+                "UPDATE vilkikai SET priekaba = ? WHERE numeris = ?",
+                (prn or "", sel_vilk)
+            )
+            conn.commit()
+            st.success(f"✅ Priekabos paskirstymas atnaujintas.")
         # 6.2) Show full-width "Add new truck" button
         st.button("➕ Pridėti naują vilkiką", on_click=new_vilk, use_container_width=True)
 
@@ -296,54 +321,76 @@ def show(conn, c):
                 if len(parts) > 1:
                     trailer = parts[1]
 
-            # 8.3) Prevent assigning a trailer already in use
-            if trailer and trailer in assigned_trailers:
-                st.warning(f"⚠️ Priekaba {trailer} jau priskirta kitam vilkikui.")
-            else:
-                # Build drivers text
-                vairuotoju_text = ", ".join(filter(None, [drv1_name, drv2_name])) or ''
-                try:
-                    if is_new:
-                        c.execute(
-                            """INSERT INTO vilkikai 
-                               (numeris, marke, pagaminimo_metai, tech_apziura, draudimas, 
-                                vadybininkas, vairuotojai, priekaba)
-                               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                            (
-                                numeris,
-                                modelis or '',
-                                pr_data.isoformat() if pr_data else '',
-                                tech_date.isoformat() if tech_date else '',
-                                draud_date.isoformat() if draud_date else '',
-                                vadyb or '',
-                                vairuotoju_text,
-                                trailer
-                            )
+            # 8.3) Prevent assigning a trailer already in use by swapping/removing
+            # Get current trailer of this truck
+            cur_row = c.execute(
+                "SELECT priekaba FROM vilkikai WHERE numeris = ?", (sel,)
+            ).fetchone()
+            cur_trailer = cur_row[0] if cur_row else ""
+
+            # Find other truck that holds 'trailer'
+            other_row = c.execute(
+                "SELECT numeris FROM vilkikai WHERE priekaba = ?", (trailer,)
+            ).fetchone()
+
+            if other_row:
+                other_truck = other_row[0]
+                # Swap: give other_truck the current truck's trailer (or empty if none)
+                c.execute(
+                    "UPDATE vilkikai SET priekaba = ? WHERE numeris = ?",
+                    (cur_trailer or "", other_truck)
+                )
+
+            # Finally assign 'trailer' to this truck (sel)
+            c.execute(
+                "UPDATE vilkikai SET priekaba = ? WHERE numeris = ?",
+                (trailer or "", sel)
+            )
+
+            # 8.4) Build drivers text
+            vairuotoju_text = ", ".join(filter(None, [drv1_name, drv2_name])) or ''
+            try:
+                if is_new:
+                    c.execute(
+                        """INSERT INTO vilkikai 
+                           (numeris, marke, pagaminimo_metai, tech_apziura, draudimas, 
+                            vadybininkas, vairuotojai, priekaba)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (
+                            numeris,
+                            modelis or '',
+                            pr_data.isoformat() if pr_data else '',
+                            tech_date.isoformat() if tech_date else '',
+                            draud_date.isoformat() if draud_date else '',
+                            vadyb or '',
+                            vairuotoju_text,
+                            trailer
                         )
-                    else:
-                        c.execute(
-                            """UPDATE vilkikai 
-                               SET marke=?, pagaminimo_metai=?, tech_apziura=?, draudimas=?, 
-                                   vadybininkas=?, vairuotojai=?, priekaba=?
-                               WHERE numeris=?""",
-                            (
-                                modelis or '',
-                                pr_data.isoformat() if pr_data else '',
-                                tech_date.isoformat() if tech_date else '',
-                                draud_date.isoformat() if draud_date else '',
-                                vadyb or '',
-                                vairuotoju_text,
-                                trailer,
-                                sel
-                            )
+                    )
+                else:
+                    c.execute(
+                        """UPDATE vilkikai 
+                           SET marke=?, pagaminimo_metai=?, tech_apziura=?, draudimas=?, 
+                               vadybininkas=?, vairuotojai=?, priekaba=?
+                           WHERE numeris=?""",
+                        (
+                            modelis or '',
+                            pr_data.isoformat() if pr_data else '',
+                            tech_date.isoformat() if tech_date else '',
+                            draud_date.isoformat() if draud_date else '',
+                            vadyb or '',
+                            vairuotoju_text,
+                            trailer,
+                            sel
                         )
-                    conn.commit()
-                    st.success("✅ Vilkikas išsaugotas sėkmingai.")
-                    if tech_date:
-                        st.info(f"🔧 Dienų iki tech. apžiūros liko: {(tech_date - date.today()).days}")
-                    if draud_date:
-                        st.info(f"🛡️ Dienų iki draudimo pabaigos liko: {(draud_date - date.today()).days}")
-                    clear_selection()
-                except Exception as e:
-                    st.error(f"❌ Klaida saugant: {e}")
+                    )
+                conn.commit()
+                st.success("✅ Vilkikas išsaugotas sėkmingai.")
+                if tech_date:
+                    st.info(f"🔧 Dienų iki tech. apžiūros liko: {(tech_date - date.today()).days}")
+                if draud_date:
+                    st.info(f"🛡️ Dienų iki draudimo pabaigos liko: {(draud_date - date.today()).days}")
+                clear_selection()
+            except Exception as e:
+                st.error(f"❌ Klaida saugant: {e}")
     # 9) End of show()
