@@ -251,6 +251,11 @@ def show(conn, c):
     pivot_df.index.name = "Vilkikas/Priekaba Vadybininkas SA"
 
     # ==============================
-    # 16) Atvaizduojame su st.dataframe, kad būtų interaktyvus ir galima rūšiuoti paspaudus ant datos
+    # 16) Užpildome visus likusius NaN/None kaip tuščias eilutes
+    # ==============================
+    pivot_df = pivot_df.fillna("")
+
+    # ==============================
+    # 17) Atvaizduojame su st.dataframe, kad būtų interaktyvus ir galima rūšiuoti paspaudus ant datos
     # ==============================
     st.dataframe(pivot_df, use_container_width=True)
