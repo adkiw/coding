@@ -1,57 +1,69 @@
 # main.py
 
 import streamlit as st
+import sqlite3
+
+# 1) Standartinis set_page_config (privalo būti pirmasis Streamlit komanda)
 st.set_page_config(layout="wide")
 
-# Tiesiogiai importuojame kiekvieną modulį iš modules katalogo
-import modules.dispo as dispo
-import modules.kroviniai as kroviniai
-import modules.vilkikai as vilkikai
-import modules.priekabos as priekabos
-import modules.grupes as grupes
-import modules.vairuotojai as vairuotojai
-import modules.klientai as klientai
-import modules.darbuotojai as darbuotojai
-import modules.nustatymai as nustatymai
-import modules.planavimas as planavimas
-import modules.update as update
+# 2) Prisijungimas prie SQLite DB
+conn = sqlite3.connect("dispo_new.db", check_same_thread=False)
+c = conn.cursor()
 
-from db import init_db
+# 3) Importuojame visus modulius
+from modules import (
+    dispo,
+    kroviniai,
+    vilkikai,
+    priekabos,
+    grupes,
+    vairuotojai,
+    klientai,
+    darbuotojai,
+    nustatymai,
+    update,
+    planavimas
+)
 
-# Prisijungimas prie DB
-conn, c = init_db()
-
-# Moduliai rodomi meniu
+# 4) Pirmoje eilutėje viršuje atvaizduojame modulio pasirinkimą horizontaliai
+st.markdown("## 📂 Pasirinkite modulį žemiau")
 moduliai = [
-    "Dispo", "Kroviniai", "Vilkikai", "Priekabos",
-    "Grupės", "Vairuotojai", "Klientai",
-    "Darbuotojai", "Nustatymai", "Planavimas", "Update"
+    "Dispo",
+    "Kroviniai",
+    "Vilkikai",
+    "Priekabos",
+    "Grupės",
+    "Vairuotojai",
+    "Klientai",
+    "Darbuotojai",
+    "Nustatymai",
+    "Planavimas",
+    "Update"
 ]
+pasirinktas = st.radio("", moduliai, horizontal=True)
 
-# Streamlit šoninis meniu
-st.sidebar.title("MENIU")
-modulis = st.sidebar.radio("Pasirinkite modulį:", moduliai)
+st.divider()
 
-# Pagrindinis logikos blokas: kviečiame atitinkamo modulio show() funkciją
-if modulis == "Dispo":
+# 5) Pagal pasirinktą modulį kviečiame atitinkamą show(...)
+if pasirinktas == "Dispo":
     dispo.show(conn, c)
-elif modulis == "Kroviniai":
+elif pasirinktas == "Kroviniai":
     kroviniai.show(conn, c)
-elif modulis == "Vilkikai":
+elif pasirinktas == "Vilkikai":
     vilkikai.show(conn, c)
-elif modulis == "Priekabos":
+elif pasirinktas == "Priekabos":
     priekabos.show(conn, c)
-elif modulis == "Grupės":
+elif pasirinktas == "Grupės":
     grupes.show(conn, c)
-elif modulis == "Vairuotojai":
+elif pasirinktas == "Vairuotojai":
     vairuotojai.show(conn, c)
-elif modulis == "Klientai":
+elif pasirinktas == "Klientai":
     klientai.show(conn, c)
-elif modulis == "Darbuotojai":
+elif pasirinktas == "Darbuotojai":
     darbuotojai.show(conn, c)
-elif modulis == "Nustatymai":
+elif pasirinktas == "Nustatymai":
     nustatymai.show(conn, c)
-elif modulis == "Planavimas":
+elif pasirinktas == "Planavimas":
     planavimas.show(conn, c)
-elif modulis == "Update":
+elif pasirinktas == "Update":
     update.show(conn, c)
