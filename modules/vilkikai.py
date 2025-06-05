@@ -53,27 +53,21 @@ def show(conn, c):
     if 'selected_vilk' not in st.session_state:
         st.session_state.selected_vilk = None
 
-    # 6) If no truck is selected (show list), display the "Priekabų paskirstymas" form and the list
+    # 6) If no truck is selected, show the list and the "Priekabų paskirstymas" form
     if st.session_state.selected_vilk is None:
         # 6.1) "Bendras priekabų priskirstymas" form
         st.markdown("### 🔄 Bendras priekabų priskirstymas")
         with st.form("priekabu_priskirt_forma", clear_on_submit=True):
-            # Build list of all truck numbers
             vilk_list = [""] + [r[0] for r in c.execute("SELECT numeris FROM vilkikai").fetchall()]
-
-            # Build trailer options with assignment status:
             pr_opts = [""]
             for num in priekabu_list:
-                # Find exactly one truck (if any) that has this trailer
                 assigned_row = c.execute(
                     "SELECT numeris FROM vilkikai WHERE priekaba = ?", (num,)
                 ).fetchone()
                 if assigned_row:
-                    # If a truck already has this trailer, show red and list that truck
                     assigned_truck = assigned_row[0]
                     pr_opts.append(f"🔴 {num} ({assigned_truck})")
                 else:
-                    # Otherwise, show green – trailer is free
                     pr_opts.append(f"🟢 {num} (laisva)")
 
             sel_vilk = st.selectbox("Pasirinkite vilkiką", vilk_list)
@@ -81,53 +75,51 @@ def show(conn, c):
             upd = st.form_submit_button("💾 Išsaugoti")
 
         if upd and sel_vilk:
-            # 6.1.a) Extract trailer number (prn) from selection
+            # 6.1.a) Extract trailer number
             prn = ""
             if sel_priek and (sel_priek.startswith("🟢") or sel_priek.startswith("🔴")):
                 parts = sel_priek.split(" ", 1)
                 if len(parts) > 1:
                     prn = parts[1].split()[0]
 
-            # 6.1.b) Determine current trailer (if any) of the selected truck
+            # 6.1.b) Current trailer of selected truck
             cur = c.execute(
                 "SELECT priekaba FROM vilkikai WHERE numeris = ?", (sel_vilk,)
             ).fetchone()
             cur_trailer = cur[0] if cur and cur[0] else ""
 
-            # 6.1.c) Check if 'prn' is assigned to a different truck
+            # 6.1.c) Check if prn is on another truck
             other = c.execute(
                 "SELECT numeris FROM vilkikai WHERE priekaba = ?", (prn,)
             ).fetchone()
 
-            # 6.1.d) If 'prn' is on another truck, swap:
+            # 6.1.d) If yes, swap
             if other:
                 other_truck = other[0]
-                # Assign the previous trailer of selected truck (cur_trailer) to that other truck (empty if none)
                 c.execute(
                     "UPDATE vilkikai SET priekaba = ? WHERE numeris = ?",
                     (cur_trailer or "", other_truck)
                 )
 
-            # 6.1.e) Finally, assign 'prn' to the selected truck (sel_vilk)
+            # 6.1.e) Assign new trailer
             c.execute(
                 "UPDATE vilkikai SET priekaba = ? WHERE numeris = ?",
                 (prn or "", sel_vilk)
             )
-
             conn.commit()
             st.success("✅ Priekabos paskirstymas sėkmingai atnaujintas.")
-            clear_selection()  # Immediately exit to the list view
+            clear_selection()
 
-        # 6.2) Show full-width "Add new truck" button
+        # 6.2) "Add new truck" button
         st.button("➕ Pridėti naują vilkiką", on_click=new_vilk, use_container_width=True)
 
         # 6.3) Display list of trucks
-        df = pd.read_sql_query("SELECT * FROM vilkikai ORDER BY tech_apziūra ASC", conn)
+        df = pd.read_sql_query("SELECT * FROM vilkikai ORDER BY tech_apziura ASC", conn)
         if df.empty:
             st.info("🔍 Kol kas nėra vilkikų.")
             return
 
-        # 6.4) Prepare DataFrame for display, replacing None/NaN with empty strings
+        # 6.4) Prepare DataFrame for display
         df = df.fillna('')
         df_disp = df.copy()
         df_disp.rename(columns={
@@ -136,7 +128,7 @@ def show(conn, c):
             'vadybininkas': 'Transporto vadybininkas'
         }, inplace=True)
 
-        # Split drivers into two columns and ensure two columns exist
+        # Split drivers
         drivers = df_disp.get('vairuotojai', pd.Series(dtype=str)).fillna('')
         drivers_df = drivers.str.split(', ', n=1, expand=True)
         if drivers_df.shape[1] < 2:
@@ -146,15 +138,15 @@ def show(conn, c):
         df_disp['Vairuotojas 2'] = drivers_df[1]
         df_disp.drop(columns=['vairuotojai'], inplace=True)
 
-        # Calculate days left to tech inspection and insurance
-        df_disp['Liko iki tech apžiūra'] = df_disp['tech_apziūra'].apply(
+        # Days until inspection and insurance
+        df_disp['Liko iki tech apžiūros'] = df_disp['tech_apziura'].apply(
             lambda x: (date.fromisoformat(x) - date.today()).days if x else ''
         )
         df_disp['Liko iki draudimo'] = df_disp['draudimas'].apply(
             lambda x: (date.fromisoformat(x) - date.today()).days if x else ''
         )
 
-        # 6.5) Filtering inputs with prefix matching
+        # 6.5) Filters (prefix matching)
         filter_cols = st.columns(len(df_disp.columns) + 1)
         for i, col in enumerate(df_disp.columns):
             filter_cols[i].text_input(label="", placeholder=col, key=f"f_{col}")
@@ -168,7 +160,7 @@ def show(conn, c):
                     df_filt[col].astype(str).str.lower().str.startswith(val.lower())
                 ]
 
-        # 6.6) Table rows with edit buttons (no header here)
+        # 6.6) Rows with edit buttons
         for _, row in df_filt.iterrows():
             row_cols = st.columns(len(df_filt.columns) + 1)
             for i, col in enumerate(df_filt.columns):
@@ -180,7 +172,7 @@ def show(conn, c):
                 args=(row['numeris'],)
             )
 
-        # 6.7) Export to CSV
+        # 6.7) CSV export
         csv = df.to_csv(index=False, sep=';').encode('utf-8')
         st.download_button(
             label="💾 Eksportuoti kaip CSV",
@@ -190,7 +182,7 @@ def show(conn, c):
         )
         return
 
-    # 7) If a truck is selected (new or edit), show the detail form
+    # 7) If a truck is selected (new/edit), show detail form
     sel = st.session_state.selected_vilk
     is_new = (sel == 0)
     vilk = {}
@@ -202,7 +194,7 @@ def show(conn, c):
             return
         vilk = df_v.iloc[0].to_dict()
 
-    # Build set of already-assigned drivers (excluding current if editing)
+    # Build assigned-driver set (excluding current if editing)
     assigned_set = set()
     for row in c.execute("SELECT numeris, vairuotojai FROM vilkikai").fetchall():
         numeris_row, drv_str = row
@@ -211,7 +203,7 @@ def show(conn, c):
                 if not (not is_new and numeris_row == sel and drv):
                     assigned_set.add(drv)
 
-    # Build set of already-assigned trailers (excluding current if editing)
+    # Build assigned-trailer set (excluding current if editing)
     assigned_trailers = set()
     for row in c.execute("SELECT numeris, priekaba FROM vilkikai").fetchall():
         numeris_row, pr_str = row
@@ -222,7 +214,7 @@ def show(conn, c):
     with st.form("vilkiku_forma", clear_on_submit=False):
         col1, col2 = st.columns(2)
 
-        # 7.1) Column 1: main fields
+        # 7.1) Column 1 fields
         numeris = col1.text_input("Vilkiko numeris", value=("" if is_new else vilk.get('numeris', '')))
 
         opts_m = [""] + markiu_list
@@ -234,20 +226,19 @@ def show(conn, c):
         pr_initial = date.fromisoformat(vilk['pagaminimo_metai']) if (not is_new and vilk.get('pagaminimo_metai')) else None
         pr_data = col1.date_input("Pirmos registracijos data", value=pr_initial, key="pr_data")
 
-        tech_initial = date.fromisoformat(vilk['tech_apziūra']) if (not is_new and vilk.get('tech_apziūra')) else None
+        tech_initial = date.fromisoformat(vilk['tech_apziura']) if (not is_new and vilk.get('tech_apziura')) else None
         tech_date = col1.date_input("Tech. apžiūros pabaiga", value=tech_initial, key="tech_date")
 
         draud_initial = date.fromisoformat(vilk['draudimas']) if (not is_new and vilk.get('draudimas')) else None
         draud_date = col1.date_input("Draudimo galiojimo pabaiga", value=draud_initial, key="draud_date")
 
-        # 7.2) Column 2: manager, group, drivers, trailer
+        # 7.2) Column 2 fields
         if not is_new and vilk.get('vadybininkas', "") in vadybininku_list:
             vadyb_idx = vadybininku_dropdown.index(vilk['vadybininkas'])
         else:
             vadyb_idx = 0
         vadyb = col2.selectbox("Transporto vadybininkas", vadybininku_dropdown, index=vadyb_idx)
 
-        # Auto-fill "Transporto grupė" based on selected vadybininkas
         transporto_grupe = ""
         if vadyb:
             parts = vadyb.split(" ")
@@ -260,7 +251,7 @@ def show(conn, c):
             transporto_grupe = gr[0] if gr and gr[0] else ""
         col2.text_input("Transporto grupė", value=transporto_grupe, disabled=True)
 
-        # 7.3) Driver dropdowns with assignment status
+        # 7.3) Drivers dropdowns
         v1_opts = [""]
         for name in vairuotoju_list:
             if name in assigned_set:
@@ -268,7 +259,6 @@ def show(conn, c):
             else:
                 v1_opts.append(f"🟢 {name}")
 
-        # Determine pre-selected indices for v1 and v2
         v1_idx = 0
         v2_idx = 0
         if not is_new and vilk['vairuotojai']:
@@ -288,13 +278,16 @@ def show(conn, c):
         v2 = col2.selectbox("Vairuotojas 2", v1_opts, index=v2_idx, key="v2")
 
         # 7.4) Trailer dropdown with status icons
-        pr_opts = [""] 
+        pr_opts = [""]
         for num in priekabu_list:
             if num in assigned_trailers:
-                assigned_truck = c.execute("SELECT numeris FROM vilkikai WHERE priekaba = ?", (num,)).fetchone()[0]
+                assigned_truck = c.execute(
+                    "SELECT numeris FROM vilkikai WHERE priekaba = ?", (num,)
+                ).fetchone()[0]
                 pr_opts.append(f"🔴 {num} ({assigned_truck})")
             else:
                 pr_opts.append(f"🟢 {num} (laisva)")
+
         pr_idx = 0
         if (not is_new) and vilk.get('priekaba'):
             for idx, opt in enumerate(pr_opts):
@@ -328,31 +321,30 @@ def show(conn, c):
         elif not numeris:
             st.warning("⚠️ Įveskite vilkiko numerį.")
         else:
-            # 8.3) Extract trailer number from selection
+            # 8.3) Extract trailer number
             trailer = ""
             if sel_pr and (sel_pr.startswith("🟢") or sel_pr.startswith("🔴")):
                 trailer = sel_pr.split(" ", 1)[1].split()[0]
 
-            # 8.4) Fetch current trailer of this truck
+            # 8.4) Current trailer of this truck
             cur = c.execute(
                 "SELECT priekaba FROM vilkikai WHERE numeris = ?", (sel,)
             ).fetchone()
             cur_trailer = cur[0] if cur and cur[0] else ""
 
-            # 8.5) Check if 'trailer' is assigned to another truck
+            # 8.5) Check if trailer is on another truck
             other = c.execute(
                 "SELECT numeris FROM vilkikai WHERE priekaba = ?", (trailer,)
             ).fetchone()
 
             if other:
                 other_truck = other[0]
-                # Swap: give other_truck the current truck's trailer (can be empty)
                 c.execute(
                     "UPDATE vilkikai SET priekaba = ? WHERE numeris = ?",
                     (cur_trailer or "", other_truck)
                 )
 
-            # 8.6) Assign chosen trailer (or empty) to sel truck
+            # 8.6) Assign trailer to this truck
             c.execute(
                 "UPDATE vilkikai SET priekaba = ? WHERE numeris = ?",
                 (trailer or "", sel)
@@ -364,7 +356,7 @@ def show(conn, c):
                 if is_new:
                     c.execute(
                         """INSERT INTO vilkikai 
-                           (numeris, marke, pagaminimo_metai, tech_apziūra, draudimas, 
+                           (numeris, marke, pagaminimo_metai, tech_apziura, draudimas, 
                             vadybininkas, vairuotojai, priekaba)
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
@@ -381,7 +373,7 @@ def show(conn, c):
                 else:
                     c.execute(
                         """UPDATE vilkikai 
-                           SET marke=?, pagaminimo_metai=?, tech_apziūra=?, draudimas=?, 
+                           SET marke=?, pagaminimo_metai=?, tech_apziura=?, draudimas=?, 
                                vadybininkas=?, vairuotojai=?, priekaba=?
                            WHERE numeris=?""",
                         (
@@ -401,7 +393,7 @@ def show(conn, c):
                     st.info(f"🔧 Dienų iki tech. apžiūros liko: {(tech_date - date.today()).days}")
                 if draud_date:
                     st.info(f"🛡️ Dienų iki draudimo pabaigos liko: {(draud_date - date.today()).days}")
-                clear_selection()  # Immediately return to list view after saving
+                clear_selection()
             except Exception as e:
                 st.error(f"❌ Klaida saugant: {e}")
     # 9) End of show()
