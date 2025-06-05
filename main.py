@@ -3,7 +3,10 @@
 import streamlit as st
 import sqlite3
 
-# 0) “Hot‐zone” CSS + nematomas swipe‐down sidebar iš viršaus
+# 1) Standartinis set_page_config (privalo būti pirmasis Streamlit komanda)
+st.set_page_config(layout="wide")
+
+# 2) “Hot‐zone” CSS + nematomas swipe‐down sidebar iš viršaus
 st.markdown("""
     <style>
       /* Paslepiame standartinį sidebar už ekrano ribų */
@@ -56,14 +59,11 @@ st.markdown("""
     <div class="hover-zone"></div>
 """, unsafe_allow_html=True)
 
-# 1) Standartinis set_page_config (privalo būti pirmasis Streamlit komanda)
-st.set_page_config(layout="wide")
-
-# 2) Prisijungimas prie SQLite DB
+# 3) Prisijungimas prie SQLite DB
 conn = sqlite3.connect("dispo_new.db", check_same_thread=False)
 c = conn.cursor()
 
-# 3) Importuojame visus modulius
+# 4) Importuojame visus modulius
 from modules import (
     dispo,
     kroviniai,
@@ -78,7 +78,7 @@ from modules import (
     planavimas
 )
 
-# 4) Sidebar meniu (nuo viršaus, bet paslėptas tol, kol nepasirodo)
+# 5) Sidebar meniu (paslėptas tol, kol nepasirodo hover iš viršaus)
 with st.sidebar:
     st.header("📂 Pasirink modulį")
     moduliai = [
@@ -96,7 +96,7 @@ with st.sidebar:
     ]
     pasirinktas = st.radio("", moduliai)
 
-# 5) Pagal pasirinktą modulį kviečiame atitinkamą show(...)
+# 6) Pagal pasirinktą modulį kviečiame atitinkamą show(...)
 if pasirinktas == "Dispo":
     dispo.show(conn, c)
 elif pasirinktas == "Kroviniai":
