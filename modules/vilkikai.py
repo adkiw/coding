@@ -174,14 +174,6 @@ def show(conn, c):
                 if not (not is_new and numeris_row == sel and drv):
                     assigned_set.add(drv)
 
-    # Build set of already-assigned trailers (excluding current if editing)
-    assigned_trailers = set()
-    for row in c.execute("SELECT numeris, priekaba FROM vilkikai").fetchall():
-        numeris_row, pr_str = row
-        if pr_str:
-            if not (not is_new and numeris_row == sel and pr_str):
-                assigned_trailers.add(pr_str)
-
     with st.form("vilkiku_forma", clear_on_submit=False):
         col1, col2 = st.columns(2)
 
@@ -253,14 +245,16 @@ def show(conn, c):
         # 7.4) Trailer dropdown with status icons
         pr_opts = [""]
         for num in priekabu_list:
-            if num in assigned_trailers:
-                pr_opts.append(f"🔴 {num}")
+            assigned = [r[0] for r in c.execute("SELECT numeris FROM vilkikai WHERE priekaba = ?", (num,)).fetchall()]
+            if assigned:
+                pr_opts.append(f"🔴 {num} ({', '.join(assigned)})")
             else:
                 pr_opts.append(f"🟢 {num} (laisva)")
         pr_idx = 0
         if (not is_new) and vilk.get('priekaba'):
             for idx, opt in enumerate(pr_opts):
-                if opt.endswith(vilk['priekaba']):
+                parts = opt.split(" ", 1)
+                if len(parts) > 1 and parts[1].split()[0] == vilk['priekaba']:
                     pr_idx = idx
                     break
         sel_pr = col2.selectbox("Priekaba", pr_opts, index=pr_idx)
@@ -278,72 +272,62 @@ def show(conn, c):
         drv1_name = extract_name(v1)
         drv2_name = extract_name(v2)
 
-        # 8.1) Prevent assigning a driver already in use
         if drv1_name and drv1_name in assigned_set:
             st.warning(f"⚠️ Vairuotojas {drv1_name} jau priskirtas kitam vilkikui.")
         elif drv2_name and drv2_name in assigned_set:
             st.warning(f"⚠️ Vairuotojas {drv2_name} jau priskirtas kitam vilkikui.")
-        # 8.2) Prevent selecting same driver twice
         elif drv1_name and drv2_name and drv1_name == drv2_name:
             st.warning("⚠️ Vairuotojas negali būti ir Vairuotojas 1, ir Vairuotojas 2 vienu metu.")
         elif not numeris:
             st.warning("⚠️ Įveskite vilkiko numerį.")
         else:
-            # Extract trailer number
-            trailer = ""
+            vairuotoju_text = ", ".join(filter(None, [drv1_name, drv2_name])) or ''
+            prn = ''
             if sel_pr and (sel_pr.startswith("🟢") or sel_pr.startswith("🔴")):
                 parts = sel_pr.split(" ", 1)
                 if len(parts) > 1:
-                    trailer = parts[1]
-
-            # 8.3) Prevent assigning a trailer already in use
-            if trailer and trailer in assigned_trailers:
-                st.warning(f"⚠️ Priekaba {trailer} jau priskirta kitam vilkikui.")
-            else:
-                # Build drivers text
-                vairuotoju_text = ", ".join(filter(None, [drv1_name, drv2_name])) or ''
-                try:
-                    if is_new:
-                        c.execute(
-                            """INSERT INTO vilkikai 
-                               (numeris, marke, pagaminimo_metai, tech_apziura, draudimas, 
-                                vadybininkas, vairuotojai, priekaba)
-                               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                            (
-                                numeris,
-                                modelis or '',
-                                pr_data.isoformat() if pr_data else '',
-                                tech_date.isoformat() if tech_date else '',
-                                draud_date.isoformat() if draud_date else '',
-                                vadyb or '',
-                                vairuotoju_text,
-                                trailer
-                            )
+                    prn = parts[1].split()[0]
+            try:
+                if is_new:
+                    c.execute(
+                        """INSERT INTO vilkikai 
+                           (numeris, marke, pagaminimo_metai, tech_apziura, draudimas, 
+                            vadybininkas, vairuotojai, priekaba)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                        (
+                            numeris,
+                            modelis or '',
+                            pr_data.isoformat() if pr_data else '',
+                            tech_date.isoformat() if tech_date else '',
+                            draud_date.isoformat() if draud_date else '',
+                            vadyb or '',
+                            vairuotoju_text,
+                            prn
                         )
-                    else:
-                        c.execute(
-                            """UPDATE vilkikai 
-                               SET marke=?, pagaminimo_metai=?, tech_apziura=?, draudimas=?, 
-                                   vadybininkas=?, vairuotojai=?, priekaba=?
-                               WHERE numeris=?""",
-                            (
-                                modelis or '',
-                                pr_data.isoformat() if pr_data else '',
-                                tech_date.isoformat() if tech_date else '',
-                                draud_date.isoformat() if draud_date else '',
-                                vadyb or '',
-                                vairuotoju_text,
-                                trailer,
-                                sel
-                            )
+                    )
+                else:
+                    c.execute(
+                        """UPDATE vilkikai 
+                           SET marke=?, pagaminimo_metai=?, tech_apziura=?, draudimas=?, 
+                               vadybininkas=?, vairuotojai=?, priekaba=?
+                           WHERE numeris=?""",
+                        (
+                            modelis or '',
+                            pr_data.isoformat() if pr_data else '',
+                            tech_date.isoformat() if tech_date else '',
+                            draud_date.isoformat() if draud_date else '',
+                            vadyb or '',
+                            vairuotoju_text,
+                            prn,
+                            sel
                         )
-                    conn.commit()
-                    st.success("✅ Vilkikas išsaugotas sėkmingai.")
-                    if tech_date:
-                        st.info(f"🔧 Dienų iki tech. apžiūros liko: {(tech_date - date.today()).days}")
-                    if draud_date:
-                        st.info(f"🛡️ Dienų iki draudimo pabaigos liko: {(draud_date - date.today()).days}")
-                    clear_selection()
-                except Exception as e:
-                    st.error(f"❌ Klaida saugant: {e}")
-    # 9) End of show()
+                    )
+                conn.commit()
+                st.success("✅ Vilkikas išsaugotas sėkmingai.")
+                if tech_date:
+                    st.info(f"🔧 Dienų iki tech. apžiūros liko: {(tech_date - date.today()).days}")
+                if draud_date:
+                    st.info(f"🛡️ Dienų iki draudimo pabaigos liko: {(draud_date - date.today()).days}")
+            except Exception as e:
+                st.error(f"❌ Klaida saugant: {e}")
+    # 9) End of show() 
