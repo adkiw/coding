@@ -96,7 +96,6 @@ def show(conn, c):
         ("sa",                     "TEXT"),
         ("created_at",             "TEXT"),
         ("ats_transporto_vadybininkas", "TEXT"),
-        # E.Vad. (ats_ekspedicijos_vadybininkas) ir trans_grupe / eksp_grupe lieka
         ("ats_ekspedicijos_vadybininkas","TEXT"),
         ("trans_grupe",            "TEXT"),
         ("eksp_grupe",             "TEXT"),
@@ -109,12 +108,15 @@ def show(conn, c):
     # ==============================
     # 2) Filtras: Transporto vadybininkas ir Transporto grupė (vienoje eilutėje)
     # ==============================
+    # Gauname visus unikalius vadybininkus (pilną vardą, kuris įrašytas vilkikai.vadybininkas)
     vadybininkai = [
         r[0] for r in c.execute(
             "SELECT DISTINCT vadybininkas FROM vilkikai WHERE vadybininkas IS NOT NULL AND vadybininkas != ''"
         ).fetchall()
     ]
-    grupe_list = [r[0] for r in c.execute("SELECT pavadinimas FROM grupes").fetchall()]
+
+    # Gauname grupių sąrašą pagal 'numeris' (ne pavadinimą!), nes darbuotojų lentelėje grupe = numeris
+    grupe_list = [r[0] for r in c.execute("SELECT numeris FROM grupes").fetchall()]
 
     col1, col2 = st.columns(2)
     vadyb         = col1.selectbox("Transporto vadybininkas", [""] + vadybininkai, index=0)
@@ -123,22 +125,25 @@ def show(conn, c):
     # ==============================
     # 3) Pasirenkame vilkikus pagal filtrus
     # ==============================
+    # Pataisyta JOIN užklausa, kad surastų darbuotoją pagal pilną vardą ("vardas pavardė")
     vilkikai_info = c.execute("""
-        SELECT v.numeris, g.pavadinimas
+        SELECT v.numeris, d.grupe
         FROM vilkikai v
-        LEFT JOIN darbuotojai d ON v.vadybininkas = d.vardas
-        LEFT JOIN grupes g ON d.grupe = g.pavadinimas
+        LEFT JOIN darbuotojai d
+          ON v.vadybininkas = (d.vardas || ' ' || d.pavarde)
     """).fetchall()
 
     vilkikai = []
-    for v, g in vilkikai_info:
+    for numeris, gr in vilkikai_info:
+        # Filtruojame pagal vadybininką, jei pasirinktas
         if vadyb and c.execute(
-            "SELECT vadybininkas FROM vilkikai WHERE numeris = ?", (v,)
+            "SELECT vadybininkas FROM vilkikai WHERE numeris = ?", (numeris,)
         ).fetchone()[0] != vadyb:
             continue
-        if grupe_filtras and (g or "") != grupe_filtras:
+        # Filtruojame pagal grupę (darbuotojų lentelėje saugomas 'grupe' = grupės numeris)
+        if grupe_filtras and (gr or "") != grupe_filtras:
             continue
-        vilkikai.append(v)
+        vilkikai.append(numeris)
 
     if not vilkikai:
         st.info("Nėra vilkikų pagal pasirinktus filtrus.")
@@ -169,17 +174,18 @@ def show(conn, c):
     # ==============================
     # 5) Žemėlapiai transporto ir ekspedicijos grupėms
     # ==============================
+    # Pataisyta JOIN sąlyga: darbuotojų vardas+vardas su vilkikai.vadybininkas
     vilk_grupes = dict(c.execute("""
-        SELECT v.numeris, g.pavadinimas
+        SELECT v.numeris, d.grupe
         FROM vilkikai v
-        LEFT JOIN darbuotojai d ON v.vadybininkas = d.vardas
-        LEFT JOIN grupes g ON d.grupe = g.pavadinimas
+        LEFT JOIN darbuotojai d
+          ON v.vadybininkas = (d.vardas || ' ' || d.pavarde)
     """).fetchall())
     eksp_grupes = dict(c.execute("""
-        SELECT k.id, g.pavadinimas
+        SELECT k.id, d.grupe
         FROM kroviniai k
-        LEFT JOIN darbuotojai d ON k.ekspedicijos_vadybininkas = d.vardas
-        LEFT JOIN grupes g ON d.grupe = g.pavadinimas
+        LEFT JOIN darbuotojai d
+          ON k.ekspedicijos_vadybininkas = (d.vardas || ' ' || d.pavarde)
     """).fetchall())
 
     # ==============================
@@ -277,7 +283,7 @@ def show(conn, c):
         pk_data     = darbo[6] if darbo and darbo[6] else str(k[3])
         komentaras  = darbo[10] if darbo and darbo[10] else ""
         eksp_vad    = darbo[12] if darbo and darbo[12] else (k[16] if len(k) > 16 else "")
-        # pašalinti: trans_gr, eksp_gr
+        # trans_gr, eksp_gr nebenaudojami
         trans_gr    = ""
         eksp_gr     = ""
 
