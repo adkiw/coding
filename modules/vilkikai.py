@@ -60,18 +60,23 @@ def show(conn, c):
         with st.form("priekabu_priskirt_forma", clear_on_submit=True):
             vilk_list = [""] + [r[0] for r in c.execute("SELECT numeris FROM vilkikai").fetchall()]
             pr_opts = [""]
+
+            # Build trailer options:
             for num in priekabu_list:
                 assigned_row = c.execute(
                     "SELECT numeris FROM vilkikai WHERE priekaba = ?", (num,)
                 ).fetchone()
-                if assigned_row:
+
+                # If assigned but to a different truck, mark red with that truck's number
+                if assigned_row and assigned_row[0] != "":
                     assigned_truck = assigned_row[0]
                     pr_opts.append(f"🔴 {num} ({assigned_truck})")
                 else:
+                    # Either unassigned or assigned to this truck—treat as free (green)
                     pr_opts.append(f"🟢 {num} (laisva)")
 
-            sel_vilk = st.selectbox("Pasirinkite vilkiką", vilk_list)
-            sel_priek = st.selectbox("Pasirinkite priekabą", pr_opts)
+            sel_vilk = st.selectbox("Pasirinkite vilkiką", vilk_list, key="f_sel_vilk")
+            sel_priek = st.selectbox("Pasirinkite priekabą", pr_opts, key="f_sel_priek")
             upd = st.form_submit_button("💾 Išsaugoti")
 
         if upd and sel_vilk:
@@ -93,15 +98,15 @@ def show(conn, c):
                 "SELECT numeris FROM vilkikai WHERE priekaba = ?", (prn,)
             ).fetchone()
 
-            # 6.1.d) If yes, swap
-            if other:
+            # 6.1.d) If yes, swap: that other truck gets cur_trailer
+            if other and other[0] != sel_vilk:
                 other_truck = other[0]
                 c.execute(
                     "UPDATE vilkikai SET priekaba = ? WHERE numeris = ?",
                     (cur_trailer or "", other_truck)
                 )
 
-            # 6.1.e) Assign new trailer
+            # 6.1.e) Assign prn (or empty) to sel_vilk
             c.execute(
                 "UPDATE vilkikai SET priekaba = ? WHERE numeris = ?",
                 (prn or "", sel_vilk)
@@ -113,7 +118,7 @@ def show(conn, c):
         # 6.2) "Add new truck" button
         st.button("➕ Pridėti naują vilkiką", on_click=new_vilk, use_container_width=True)
 
-        # 6.3) Display list of trucks
+        # 6.3) Display list of trucks (ordered by tech_apziura)
         df = pd.read_sql_query("SELECT * FROM vilkikai ORDER BY tech_apziura ASC", conn)
         if df.empty:
             st.info("🔍 Kol kas nėra vilkikų.")
@@ -337,8 +342,9 @@ def show(conn, c):
                 "SELECT numeris FROM vilkikai WHERE priekaba = ?", (trailer,)
             ).fetchone()
 
-            if other:
+            if other and other[0] != sel:
                 other_truck = other[0]
+                # Swap: give other_truck the current truck's trailer
                 c.execute(
                     "UPDATE vilkikai SET priekaba = ? WHERE numeris = ?",
                     (cur_trailer or "", other_truck)
@@ -374,7 +380,7 @@ def show(conn, c):
                     c.execute(
                         """UPDATE vilkikai 
                            SET marke=?, pagaminimo_metai=?, tech_apziura=?, draudimas=?, 
-                               vadybininkas=?, vairuotojai=?, priekaba=?
+                               vadybininkas=?, vairuotojai=?, priekaba=? 
                            WHERE numeris=?""",
                         (
                             modelis or '',
