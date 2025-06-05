@@ -6,15 +6,21 @@ import sqlite3
 # 1) Privalo būti pirmasis – nustatome platų išdėstymą
 st.set_page_config(layout="wide")
 
-# 2) CSS stilius, kad viršuje esantis radio bar būtų apie 1 cm aukščio
+# 2) CSS, kad radio-bar būtų tiesiai lango viršuje ir apie 1 cm aukščio
 st.markdown("""
     <style>
-      /* Tiesiogiai taikome CSS radio-grupei, kad visi pasirinkimai būtų viena eilute ir baras būtų ~ 1 cm */
+      /* Pašaliname visus viršutinius margin’us aplikacijoje */
+      .css-18e3th9 {
+        padding-top: 0 !important;
+      }
+      /* Tiesiogiai taikome CSS radio-grupei: 1 cm aukštis, be papildomų tarpelio */
       .stRadio > div {
         height: 1cm !important;
-        overflow: hidden; 
+        margin-top: 0 !important;
+        padding-top: 0 !important;
+        overflow: hidden;
       }
-      /* Kaip papildoma – sumažiname kiekvieno radion mygtuko vertikalinius padding’us */
+      /* Naikiname radio mygtukų vertikalius padding’us */
       .stRadio > div > label > div {
         padding-top: 0 !important;
         padding-bottom: 0 !important;
@@ -41,7 +47,7 @@ from modules import (
     planavimas
 )
 
-# 5) Viršuje – horizontalus mygtukų baras (radio be jokių užrašų)
+# 5) Tiesiai viršuje – horizontalus mygtukų baras (radio be užrašų)
 moduliai = [
     "Dispo",
     "Kroviniai",
