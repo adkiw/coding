@@ -14,7 +14,7 @@ TAUTYBES = [
 ]
 
 def show(conn, c):
-    # 1) Užtikriname, kad lentelėje 'vairuotojai' egzistuotų visi reikalingi stulpeliai
+    # 1) Užtikrinkime, kad lentelėje 'vairuotojai' egzistuotų visi reikalingi stulpeliai
     existing = [r[1] for r in c.execute("PRAGMA table_info(vairuotojai)").fetchall()]
     extras = {
         "vardas": "TEXT",
@@ -252,7 +252,7 @@ def show(conn, c):
     # 6.1) Mygtukas „➕ Pridėti vairuotoją“ per visą plotį, prieš filtrus
     st.button("➕ Pridėti vairuotoją", on_click=new_vair, use_container_width=True)
 
-    # 6.2) Paruošiame duomenis rodymui: įtraukiame 'id', užpildome None → ''
+    # 6.2) Paruošiame duomenis rodymui: lieka 'id', pildome None → ''
     df = df.fillna("")
     df_disp = df[[
         "id", "vardas", "pavarde", "gimimo_metai", "tautybe",
@@ -297,20 +297,21 @@ def show(conn, c):
         assigned.append(driver_to_vilk.get(name, ""))
     df_disp["Priskirtas vilkikas"] = assigned
 
-    # 6.5) FILTRAVIMO LAUKAI be papildomų antraščių virš jų
+    # 6.5) FILTRAVIMO LAUKAI be antraščių virš jų (tik placeholder)
     filter_cols = st.columns(len(df_disp.columns) + 1)
     for i, col in enumerate(df_disp.columns):
         filter_cols[i].text_input(label="", placeholder=col, key=f"f_{col}")
-    filter_cols[-1].write("")  # papildomas tuščias stulpelis filtrui
+    filter_cols[-1].write("")
 
     df_filt = df_disp.copy()
     for col in df_disp.columns:
         val = st.session_state.get(f"f_{col}", "")
         if val:
+            # Substring (contains) filtravimas su case-insensitive
             df_filt = df_filt[df_filt[col].astype(str).str.contains(val, case=False, na=False)]
 
-    # 6.6) **PAŠALINTA: lentelės stulpelių antraštė po filtrų**
-    #     (nebėra hdr = st.columns(...) ir markdown eilutės)
+    # 6.6) **PAŠALINTA: header blokas po filtrų**, kad nebūtų dubliuojama.
+    #     (Nebėra hdr = st.columns(...) ir markdown eilutės.)
 
     # 6.7) Lentelės eilutės su redagavimo mygtuku
     for _, row in df_filt.iterrows():
