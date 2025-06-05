@@ -122,7 +122,7 @@ def show(conn, c):
         st.button("➕ Pridėti naują vilkiką", on_click=new_vilk, use_container_width=True)
 
         # 6.3) Display list of trucks
-        df = pd.read_sql_query("SELECT * FROM vilkikai ORDER BY tech_apziura ASC", conn)
+        df = pd.read_sql_query("SELECT * FROM vilkikai ORDER BY tech_apziūra ASC", conn)
         if df.empty:
             st.info("🔍 Kol kas nėra vilkikų.")
             return
@@ -147,7 +147,7 @@ def show(conn, c):
         df_disp.drop(columns=['vairuotojai'], inplace=True)
 
         # Calculate days left to tech inspection and insurance
-        df_disp['Liko iki tech apžiūros'] = df_disp['tech_apziura'].apply(
+        df_disp['Liko iki tech apžiūra'] = df_disp['tech_apziūra'].apply(
             lambda x: (date.fromisoformat(x) - date.today()).days if x else ''
         )
         df_disp['Liko iki draudimo'] = df_disp['draudimas'].apply(
@@ -234,7 +234,7 @@ def show(conn, c):
         pr_initial = date.fromisoformat(vilk['pagaminimo_metai']) if (not is_new and vilk.get('pagaminimo_metai')) else None
         pr_data = col1.date_input("Pirmos registracijos data", value=pr_initial, key="pr_data")
 
-        tech_initial = date.fromisoformat(vilk['tech_apziura']) if (not is_new and vilk.get('tech_apziura')) else None
+        tech_initial = date.fromisoformat(vilk['tech_apziūra']) if (not is_new and vilk.get('tech_apziūra')) else None
         tech_date = col1.date_input("Tech. apžiūros pabaiga", value=tech_initial, key="tech_date")
 
         draud_initial = date.fromisoformat(vilk['draudimas']) if (not is_new and vilk.get('draudimas')) else None
@@ -288,7 +288,7 @@ def show(conn, c):
         v2 = col2.selectbox("Vairuotojas 2", v1_opts, index=v2_idx, key="v2")
 
         # 7.4) Trailer dropdown with status icons
-        pr_opts = [""]
+        pr_opts = [""] 
         for num in priekabu_list:
             if num in assigned_trailers:
                 assigned_truck = c.execute("SELECT numeris FROM vilkikai WHERE priekaba = ?", (num,)).fetchone()[0]
@@ -359,12 +359,12 @@ def show(conn, c):
             )
 
             # 8.7) Build drivers text
-            vairuotoju_text = ", ".in(filter(None, [drv1_name, drv2_name])) or ''
+            vairuotoju_text = ", ".join(filter(None, [drv1_name, drv2_name])) or ''
             try:
                 if is_new:
                     c.execute(
                         """INSERT INTO vilkikai 
-                           (numeris, marke, pagaminimo_metai, tech_apziura, draudimas, 
+                           (numeris, marke, pagaminimo_metai, tech_apziūra, draudimas, 
                             vadybininkas, vairuotojai, priekaba)
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
@@ -381,7 +381,7 @@ def show(conn, c):
                 else:
                     c.execute(
                         """UPDATE vilkikai 
-                           SET marke=?, pagaminimo_metai=?, tech_apziura=?, draudimas=?, 
+                           SET marke=?, pagaminimo_metai=?, tech_apziūra=?, draudimas=?, 
                                vadybininkas=?, vairuotojai=?, priekaba=?
                            WHERE numeris=?""",
                         (
