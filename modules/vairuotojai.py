@@ -14,7 +14,7 @@ TAUTYBES = [
 ]
 
 def show(conn, c):
-    # 1) Užtikrinkime, kad lentelėje 'vairuotojai' egzistuotų visi reikalingi stulpeliai
+    # 1) Užtikriname, kad lentelėje 'vairuotojai' egzistuotų visi reikalingi stulpeliai
     existing = [r[1] for r in c.execute("PRAGMA table_info(vairuotojai)").fetchall()]
     extras = {
         "vardas": "TEXT",
@@ -309,11 +309,8 @@ def show(conn, c):
         if val:
             df_filt = df_filt[df_filt[col].astype(str).str.contains(val, case=False, na=False)]
 
-    # 6.6) Vienintelis lentelės antraštės blokas po filtrų
-    hdr = st.columns(len(df_filt.columns) + 1)
-    for i, col in enumerate(df_filt.columns):
-        hdr[i].markdown(f"**{col}**")
-    hdr[-1].markdown("**Veiksmai**")
+    # 6.6) **PAŠALINTA: lentelės stulpelių antraštė po filtrų**
+    #     (nebėra hdr = st.columns(...) ir markdown eilutės)
 
     # 6.7) Lentelės eilutės su redagavimo mygtuku
     for _, row in df_filt.iterrows():
