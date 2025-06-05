@@ -47,25 +47,25 @@ def show(conn, c):
 
     # 4. List view
     if st.session_state.selected_client is None:
+        # 4.1) Filter by company name
+        name_filter = st.text_input("🔍 Įveskite kliento pavadinimą", key="filter_name")
+
         # Load data
         df = pd.read_sql(
             "SELECT id, pavadinimas, salis, regionas, miestas, likes_limitas AS limito_likutis FROM klientai",
             conn
         )
-        # Filters above headers
-        filter_cols = st.columns(len(df.columns) + 1)
-        for i, col in enumerate(df.columns):
-            filter_cols[i].text_input(f"🔍 {col}", key=f"f_{col}")
-        filter_cols[-1].write("")
-        for col in df.columns:
-            val = st.session_state.get(f"f_{col}", "")
-            if val:
-                df = df[df[col].astype(str).str.contains(val, case=False, na=False)]
+
+        # 4.2) Apply name filter if provided
+        if name_filter:
+            df = df[df['pavadinimas'].astype(str).str.contains(name_filter, case=False, na=False)]
+
         # Header row
         hdr = st.columns(len(df.columns) + 1)
         for i, col in enumerate(df.columns):
             hdr[i].markdown(f"**{col}**")
         hdr[-1].markdown("**Veiksmai**")
+
         # Data rows with spacing
         for _, row in df.iterrows():
             row_cols = st.columns(len(df.columns) + 1)
@@ -289,7 +289,7 @@ def show(conn, c):
             if new_liks < 0:
                 new_liks = 0.0
 
-            # Update všetky rows where vat_numeris = vat
+            # Update all rows where vat_numeris = vat
             c.execute("""
                 UPDATE klientai
                 SET coface_limitas = ?, musu_limitas = ?, likes_limitas = ?
