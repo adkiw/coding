@@ -36,7 +36,6 @@ def show(conn, c):
     # 3) Callbacks for session state
     def clear_selection():
         st.session_state.selected_vilk = None
-        # Clear filters
         for key in list(st.session_state):
             if key.startswith("f_"):
                 st.session_state[key] = ""
@@ -60,7 +59,7 @@ def show(conn, c):
         st.markdown("### 🔄 Bendras priekabų priskirstymas")
         with st.form("priekabu_priskirt_forma", clear_on_submit=True):
             vilk_list = [""] + [r[0] for r in c.execute("SELECT numeris FROM vilkikai").fetchall()]
-            pr_opts = [""] 
+            pr_opts = [""]
             for num in priekabu_list:
                 assigned = [r[0] for r in c.execute(
                     "SELECT numeris FROM vilkikai WHERE priekaba = ?", (num,)
@@ -132,13 +131,7 @@ def show(conn, c):
                     df_filt[col].astype(str).str.lower().str.startswith(val.lower())
                 ]
 
-        # 6.6) Table header
-        hdr = st.columns(len(df_filt.columns) + 1)
-        for i, col in enumerate(df_filt.columns):
-            hdr[i].markdown(f"**{col}**")
-        hdr[-1].markdown("**Veiksmai**")
-
-        # 6.7) Table rows with edit buttons
+        # 6.6) Table rows with edit buttons (no header block here)
         for _, row in df_filt.iterrows():
             row_cols = st.columns(len(df_filt.columns) + 1)
             for i, col in enumerate(df_filt.columns):
@@ -150,7 +143,7 @@ def show(conn, c):
                 args=(row['numeris'],)
             )
 
-        # 6.8) Export to CSV
+        # 6.7) Export to CSV
         csv = df.to_csv(index=False, sep=';').encode('utf-8')
         st.download_button(
             label="💾 Eksportuoti kaip CSV",
@@ -236,12 +229,10 @@ def show(conn, c):
         if not is_new and vilk['vairuotojai']:
             parts = vilk['vairuotojai'].split(', ')
             if parts:
-                # For Vairuotojas 1
                 for idx, opt in enumerate(v1_opts):
                     if opt.endswith(parts[0]):
                         v1_idx = idx
                         break
-                # For Vairuotojas 2
                 if len(parts) > 1:
                     for idx, opt in enumerate(v1_opts):
                         if opt.endswith(parts[1]):
@@ -274,7 +265,6 @@ def show(conn, c):
 
     # 8) Handle form submission
     if submit:
-        # Helper to extract actual name from dropdown
         def extract_name(selection):
             if selection and (selection.startswith("🟢") or selection.startswith("🔴")):
                 return selection.split(" ", 1)[1]
@@ -282,20 +272,16 @@ def show(conn, c):
         drv1_name = extract_name(v1)
         drv2_name = extract_name(v2)
 
-        # 8.1) Prevent assigning a driver already in use
         if drv1_name and drv1_name in assigned_set:
             st.warning(f"⚠️ Vairuotojas {drv1_name} jau priskirtas kitam vilkikui.")
         elif drv2_name and drv2_name in assigned_set:
             st.warning(f"⚠️ Vairuotojas {drv2_name} jau priskirtas kitam vilkikui.")
-        # 8.2) Prevent selecting same driver twice
         elif drv1_name and drv2_name and drv1_name == drv2_name:
             st.warning("⚠️ Vairuotojas negali būti ir Vairuotojas 1, ir Vairuotojas 2 vienu metu.")
         elif not numeris:
             st.warning("⚠️ Įveskite vilkiko numerį.")
         else:
-            # Build drivers text
             vairuotoju_text = ", ".join(filter(None, [drv1_name, drv2_name])) or ''
-            # Extract trailer number
             prn = ''
             if sel_pr and (sel_pr.startswith("🟢") or sel_pr.startswith("🔴")):
                 parts = sel_pr.split(" ", 1)
