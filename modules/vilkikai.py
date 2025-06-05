@@ -47,16 +47,14 @@ def show(conn, c):
     def edit_vilk(numeris):
         st.session_state.selected_vilk = numeris
 
-    # 4) Title + "Add new truck" button
-    col_title, col_add = st.columns([9, 1])
-    col_title.title("Vilkikų valdymas")
-    col_add.button("➕ Pridėti naują vilkiką", on_click=new_vilk)
+    # 4) Title
+    st.title("Vilkikų valdymas")
 
     # 5) Initialize session state if not yet defined
     if 'selected_vilk' not in st.session_state:
         st.session_state.selected_vilk = None
 
-    # 6) If no truck is selected (i.e., show list), display the "Priekabų paskirstymas" form and the list
+    # 6) If no truck is selected (show list), display the "Priekabų paskirstymas" form and the list
     if st.session_state.selected_vilk is None:
         # 6.1) "Bendras priekabų priskirstymas" form
         st.markdown("### 🔄 Bendras priekabų priskirstymas")
@@ -93,7 +91,7 @@ def show(conn, c):
             st.info("🔍 Kol kas nėra vilkikų.")
             return
 
-        # 6.4) Prepare DataFrame for display, replacing None with empty strings
+        # 6.4) Prepare DataFrame for display, replacing None/NaN with empty strings
         df = df.fillna('')
         df_disp = df.copy()
         df_disp.rename(columns={
@@ -102,11 +100,9 @@ def show(conn, c):
             'vadybininkas': 'Transporto vadybininkas'
         }, inplace=True)
 
-        # Split drivers into two columns
+        # Split drivers into two columns and fill missing
         drivers = df_disp.get('vairuotojai', pd.Series(dtype=str)).fillna('')
-        drivers_df = drivers.str.split(', ', n=1, expand=True)
-        if 1 not in drivers_df:
-            drivers_df[1] = ''
+        drivers_df = drivers.str.split(', ', n=1, expand=True).fillna('')
         df_disp['Vairuotojas 1'] = drivers_df[0]
         df_disp['Vairuotojas 2'] = drivers_df[1]
         df_disp.drop(columns=['vairuotojai'], inplace=True)
@@ -177,9 +173,9 @@ def show(conn, c):
         numeris_row, drv_str = row
         if drv_str:
             for drv in drv_str.split(', '):
-                if not (not is_new and numeris_row == sel and drv in ('')):
-                    if not (not is_new and numeris_row == sel):
-                        assigned_set.add(drv)
+                # If editing, skip current's existing drivers
+                if not (not is_new and numeris_row == sel and drv):
+                    assigned_set.add(drv)
 
     with st.form("vilkiku_forma", clear_on_submit=False):
         col1, col2 = st.columns(2)
@@ -274,22 +270,29 @@ def show(conn, c):
 
     # 8) Handle form submission
     if submit:
-        # Prevent duplicate driver selection
+        # Helper to extract actual name from dropdown
         def extract_name(selection):
             if selection and (selection.startswith("🟢") or selection.startswith("🔴")):
                 return selection.split(" ", 1)[1]
             return ""
         drv1_name = extract_name(v1)
         drv2_name = extract_name(v2)
-        if drv1_name and drv2_name and drv1_name == drv2_name:
+
+        # 8.1) Prevent assigning a driver already in use
+        if drv1_name and drv1_name in assigned_set:
+            st.warning(f"⚠️ Vairuotojas {drv1_name} jau priskirtas kitam vilkikui.")
+        elif drv2_name and drv2_name in assigned_set:
+            st.warning(f"⚠️ Vairuotojas {drv2_name} jau priskirtas kitam vilkikui.")
+        # 8.2) Prevent selecting same driver twice
+        elif drv1_name and drv2_name and drv1_name == drv2_name:
             st.warning("⚠️ Vairuotojas negali būti ir Vairuotojas 1, ir Vairuotojas 2 vienu metu.")
         elif not numeris:
             st.warning("⚠️ Įveskite vilkiko numerį.")
         else:
             # Build drivers text
-            vairuotoju_text = ", ".join(filter(None, [drv1_name, drv2_name])) or None
+            vairuotoju_text = ", ".join(filter(None, [drv1_name, drv2_name])) or ''
             # Extract trailer number
-            prn = None
+            prn = ''
             if sel_pr and (sel_pr.startswith("🟢") or sel_pr.startswith("🔴")):
                 parts = sel_pr.split(" ", 1)
                 if len(parts) > 1:
@@ -303,11 +306,11 @@ def show(conn, c):
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
                             numeris,
-                            modelis or None,
-                            pr_data.isoformat() if pr_data else None,
-                            tech_date.isoformat() if tech_date else None,
-                            draud_date.isoformat() if draud_date else None,
-                            vadyb or None,
+                            modelis or '',
+                            pr_data.isoformat() if pr_data else '',
+                            tech_date.isoformat() if tech_date else '',
+                            draud_date.isoformat() if draud_date else '',
+                            vadyb or '',
                             vairuotoju_text,
                             prn
                         )
@@ -319,11 +322,11 @@ def show(conn, c):
                                vadybininkas=?, vairuotojai=?, priekaba=?
                            WHERE numeris=?""",
                         (
-                            modelis or None,
-                            pr_data.isoformat() if pr_data else None,
-                            tech_date.isoformat() if tech_date else None,
-                            draud_date.isoformat() if draud_date else None,
-                            vadyb or None,
+                            modelis or '',
+                            pr_data.isoformat() if pr_data else '',
+                            tech_date.isoformat() if tech_date else '',
+                            draud_date.isoformat() if draud_date else '',
+                            vadyb or '',
                             vairuotoju_text,
                             prn,
                             sel
