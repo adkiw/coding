@@ -30,7 +30,7 @@ st.markdown("""
 conn = sqlite3.connect("dispo_new.db", check_same_thread=False)
 c = conn.cursor()
 
-# 4) Importuojame modulius (Dispo modulis pašalintas)
+# 4) Importuojame modulius (Dispo ir Nustatymai moduliai pašalinti)
 from modules import (
     kroviniai,
     vilkikai,
@@ -39,7 +39,6 @@ from modules import (
     vairuotojai,
     klientai,
     darbuotojai,
-    nustatymai,
     planavimas,
     update
 )
@@ -53,7 +52,6 @@ moduliai = [
     "Vairuotojai",
     "Klientai",
     "Darbuotojai",
-    "Nustatymai",
     "Planavimas",
     "Update"
 ]
@@ -74,8 +72,6 @@ elif pasirinktas == "Klientai":
     klientai.show(conn, c)
 elif pasirinktas == "Darbuotojai":
     darbuotojai.show(conn, c)
-elif pasirinktas == "Nustatymai":
-    nustatymai.show(conn, c)
 elif pasirinktas == "Planavimas":
     planavimas.show(conn, c)
 elif pasirinktas == "Update":
