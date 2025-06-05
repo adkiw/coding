@@ -87,7 +87,7 @@ def show(conn, c):
     conn.commit()
 
     # ==============================
-    # 2) Filtrai: transporto vadybininkas ir transporto grupė
+    # 2) Filtrai: Transporto vadybininkas ir Transporto grup4 (vienoje eilutėje)
     # ==============================
     vadybininkai = [
         r[0] for r in c.execute(
@@ -96,8 +96,9 @@ def show(conn, c):
     ]
     grupe_list = [r[0] for r in c.execute("SELECT pavadinimas FROM grupes").fetchall()]
 
-    vadyb        = st.selectbox("Pasirink transporto vadybininką", [""] + vadybininkai, index=0)
-    grupe_filtras= st.selectbox("Filtruok pagal transporto grupę", [""] + grupe_list, index=0)
+    col1, col2 = st.columns(2)
+    vadyb         = col1.selectbox("Transporto vadybininkas", [""] + vadybininkai, index=0)
+    grupe_filtras = col2.selectbox("Transporto grup4", [""] + grupe_list, index=0)
 
     # ==============================
     # 3) Pasirenkame vilkikus pagal filtrus
@@ -111,12 +112,12 @@ def show(conn, c):
 
     vilkikai = []
     for v, g in vilkikai_info:
-        # Filtras: vadybininkas
+        # Filtras: Transporto vadybininkas
         if vadyb and c.execute(
             "SELECT vadybininkas FROM vilkikai WHERE numeris = ?", (v,)
         ).fetchone()[0] != vadyb:
             continue
-        # Filtras: transporto grupė
+        # Filtras: Transporto grup4
         if grupe_filtras and (g or "") != grupe_filtras:
             continue
         vilkikai.append(v)
@@ -196,30 +197,30 @@ def show(conn, c):
 
     headers = [
         ("💾",       "Save"),      # Save
-        ("Atn.",     "Atnaujinimo laikas"),# Atnaujinta:
+        ("Atn.",     "Atnaujinimo laikas"), # Atnaujinta:
         ("Vilk.",    "Vilkikas"),  # Vilkikas
         ("Priek.",   "Priekaba"),  # Priekaba
-        ("P.D.",     "Pakrovimo data"),# Pakr. data
-        ("P.L.",     "Pakrovimo laikas"),# Pakr. laikas
-        ("P.V.",     "Pakrovimo vieta"),# Pakrovimo vieta
-        ("I.D.",     "Iškrovimo data"),# Iškr. data
-        ("I.L.",     "Iškrovimo laikas"),# Iškr. laikas
-        ("I.V.",     "Iškrovimo vieta"),# Iškr. vieta
-        ("Km",       "Kilometražas"),        # Km
-        ("T.Gr.",    "Transporto grupė"), # Transporto grupė
-        ("T.Vad.",   "Transporto vadybininkas"),# Transporto vadybininkas
-        ("E.Gr.",    "Ekspedicinė grupė"),# Ekspedicinė grupė
-        ("E.Vad.",   "Ekspedicijos vadybininkas"),# Ekspedicijos vadybininkas
-        ("SA",       "Savaitinė atstova"),        # SA
-        ("BDL",      "Vairuotojo bendro darbo laiko pabaiga"),       # BDL
-        ("LDL",      "Vairuotojo likusios darbo valandos po atvykimo"),       # LDL
-        ("P.D.*",    "Planuojamo atvykimo į pakrovima data"),# Pakr. data (edit)
+        ("P.D.",     "Pakrovimo data"),       # Pakr. data
+        ("P.L.",     "Pakrovimo laikas"),      # Pakr. laikas
+        ("P.V.",     "Pakrovimo vieta"),       # Pakrovimo vieta
+        ("I.D.",     "Iškrovimo data"),        # Iškr. data
+        ("I.L.",     "Iškrovimo laikas"),      # Iškr. laikas
+        ("I.V.",     "Iškrovimo vieta"),       # Iškr. vieta
+        ("Km",       "Kilometražas"),          # Km
+        ("T.Gr.",    "Transporto grupė"),      # Transporto grupė
+        ("T.Vad.",   "Transporto vadybininkas"), # Transporto vadybininkas
+        ("E.Gr.",    "Ekspedicinė grupė"),     # Ekspedicinė grupė
+        ("E.Vad.",   "Ekspedicijos vadybininkas"), # Ekspedicijos vadybininkas
+        ("SA",       "Savaitinė atstova"),     # SA
+        ("BDL",      "Vairuotojo bendro darbo laiko pabaiga"), # BDL
+        ("LDL",      "Vairuotojo likusios darbo valandos po atvykimo"), # LDL
+        ("P.D.*",    "Planuojamo atvykimo į pakrovimą data"),  # Pakr. data (edit)
         ("P.L.*",    "Planuojamo atvykimo į pakrovimą laikas"),# Pakr. laikas (edit)
-        ("P.St.*",   "Pakrovimo statusas statusas"),# Pakr. statusas (edit)
-        ("I.D.*",    "Planuojamo atvykimo į iškrovimą data"),# Iškr. data (edit)
+        ("P.St.*",   "Pakrovimo statusas"),     # Pakr. statusas (edit)
+        ("I.D.*",    "Planuojamo atvykimo į iškrovimą data"), # Iškr. data (edit)
         ("I.L.*",    "Planuojamo atvykimo į iškrovimą laikas"),# Iškr. laikas (edit)
-        ("I.St.*",   "Iškrovimo statusas"),# Iškr. statusas (edit)
-        ("Kom.",     "Komentaras") # Komentaras
+        ("I.St.*",   "Iškrovimo statusas"),     # Iškr. statusas (edit)
+        ("Kom.",     "Komentaras")              # Komentaras
     ]
 
     # ==============================
