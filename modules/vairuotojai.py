@@ -14,24 +14,23 @@ TAUTYBES = [
 ]
 
 def show(conn, c):
-    # 1) Užtikriname, kad lentelėje 'vairuotojai' būtų reikalingi stulpeliai
+    # 1) Užtikriname, kad lentelėje 'vairuotojai' egzistuotų visi reikalingi stulpeliai
     existing = [r[1] for r in c.execute("PRAGMA table_info(vairuotojai)").fetchall()]
     extras = {
         "vardas": "TEXT",
         "pavarde": "TEXT",
         "gimimo_metai": "TEXT",
         "tautybe": "TEXT",
-        # Pridedame stulpelius, kuriuos norime naudoti formose:
         "kadencijos_pabaiga": "TEXT",
-        "atostogu_pabaiga": "TEXT"
+        "atostogu_pabaiga": "TEXT",
     }
     for col, typ in extras.items():
         if col not in existing:
             c.execute(f"ALTER TABLE vairuotojai ADD COLUMN {col} {typ}")
     conn.commit()
 
-    # 2) Surenkame informaciją iš 'vilkikai' apie tai, kam koks vairuotojas priskirtas
-    #    (t. y. pagal vilkikų modulį)
+    # 2) Surenkame priskyrimus iš 'vilkikai' modulio:
+    #    sudarome žodyną driver_to_vilk, kad vardas+pavardė → vilkiko numeris
     driver_to_vilk = {}
     for numeris, drv_str in c.execute("SELECT numeris, vairuotojai FROM vilkikai").fetchall():
         if drv_str:
@@ -53,7 +52,7 @@ def show(conn, c):
 
     sel = st.session_state.selected_vair
 
-    # 4) Redagavimo forma (kai pasirinktame esamas vairuotojas)
+    # 4) Redagavimo forma (kai pasirinktas esamas vairuotojas)
     if sel not in (None, 0):
         df_sel = pd.read_sql_query(
             "SELECT * FROM vairuotojai WHERE id = ?", conn, params=(sel,)
@@ -68,7 +67,7 @@ def show(conn, c):
         is_assigned = full_name in driver_to_vilk
 
         with st.form("edit_form", clear_on_submit=False):
-            # Pagrindiniai laukai
+            # --- Pagrindiniai laukai ---
             vardas = st.text_input(
                 "Vardas",
                 value=row.get("vardas", ""),
@@ -102,7 +101,7 @@ def show(conn, c):
                 key="tautybe"
             )
 
-            # 4.1) Kadencijos pabaiga rodomas tik jei vairuotojas priskirtas vilkikui
+            # --- Kadencijos pabaigos laukas: tik jei vairuotojas priskirtas ---
             if is_assigned:
                 kad_initial = (
                     date.fromisoformat(row["kadencijos_pabaiga"])
@@ -116,7 +115,7 @@ def show(conn, c):
             else:
                 kad_pab = None
 
-            # 4.2) Atostogų pabaiga rodomas tik jei vairuotojas nepriskirtas jokiam vilkikui
+            # --- Atostogų pabaigos laukas: tik jei vairuotojas nepriskirtas ---
             if not is_assigned:
                 atost_initial = (
                     date.fromisoformat(row["atostogu_pabaiga"])
@@ -140,25 +139,24 @@ def show(conn, c):
                 st.warning("⚠️ Privalomi laukai: vardas ir pavardė.")
                 error = True
 
-            # 4.3) Jei vairuotojas priskirtas, negalima išsaugoti atostogų pabaigos
+            # Jei dabar priskirtas, neturi būti pildoma atostogų pabaiga
             if is_assigned and st.session_state.get("atost_pab"):
-                st.error("❌ Negalite nurodyti atostogų pabaigos, kai vairuotojas jau priskirtas vilkikui.")
+                st.error("❌ Negalite nurodyti atostogų pabaigos, kai vairuotojas priskirtas vilkikui.")
                 error = True
 
-            # 4.4) Jei vairuotojas nepriskirtas, negalima išsaugoti kadencijos pabaigos
+            # Jei dabar nepriskirtas, neturi būti pildoma kadencijos pabaiga
             if not is_assigned and st.session_state.get("kad_pab"):
                 st.error("❌ Negalite nurodyti kadencijos pabaigos, kai vairuotojas nepriskirtas vilkikui.")
                 error = True
 
             if not error:
                 try:
-                    # Jeigu priskirtas, įrašome kadencijos_pabaiga ir išvalome atostogu_pabaiga
-                    kad_str = ""
-                    atost_str = ""
+                    # Jeigu priskirtas: įrašome tik kadencijos_pabaiga, atostogu_pabaiga išvalome
                     if is_assigned:
                         kad_str = st.session_state.kad_pab.isoformat() if st.session_state.kad_pab else ""
                         atost_str = ""
                     else:
+                        # Jeigu nepriskirtas: įrašome tik atostogu_pabaiga, kadencijos_pabaiga išvalome
                         atost_str = st.session_state.atost_pab.isoformat() if st.session_state.atost_pab else ""
                         kad_str = ""
 
@@ -172,10 +170,9 @@ def show(conn, c):
                         (
                             st.session_state.vardas,
                             st.session_state.pavarde,
-                            st.session_state.gim_data.isoformat()
-                            if st.session_state.gim_data else "",
+                            st.session_state.gim_data.isoformat() if st.session_state.gim_data else "",
                             st.session_state.tautybe.split("(")[-1][:-1]
-                            if "(" in st.session_state.tautybe else st.session_state.tautybe,
+                                if "(" in st.session_state.tautybe else st.session_state.tautybe,
                             kad_str,
                             atost_str,
                             sel
@@ -188,7 +185,7 @@ def show(conn, c):
                     st.error(f"❌ Klaida: {e}")
         return
 
-    # 5) Naujo vairuotojo forma (visada nepriskirtas, tad rodome atostogų pabaigą)
+    # 5) Naujo vairuotojo forma (visada nepriskirtas → rodom tik atostogų pabaiga)
     if sel == 0:
         with st.form("new_form", clear_on_submit=True):
             vardas = st.text_input("Vardas", key="vardas")
@@ -202,8 +199,8 @@ def show(conn, c):
             tautybes_opts = [f"{name} ({code})" for name, code in TAUTYBES]
             tautybe = st.selectbox("Tautybė", tautybes_opts, key="tautybe")
 
-            # 5.1) Naujam vairuotojui rodome tik atostogų pabaigos lauką
-            atostogi = st.date_input(
+            # Naujam vairuotojui rodome tik "Atostogų pabaiga"
+            atost_pab = st.date_input(
                 "Atostogų pabaiga",
                 value=date.today(),
                 key="atost_pab"
@@ -221,7 +218,7 @@ def show(conn, c):
 
             if not error:
                 try:
-                    # Kadangi naujas vairuotojas nepriskirtas, įrašome tik atostogų pabaigą
+                    # Įrašome: atostogu_pabaiga = įvesta data, kadencijos_pabaiga = tuščia
                     c.execute(
                         """
                         INSERT INTO vairuotojai(
@@ -232,11 +229,10 @@ def show(conn, c):
                         (
                             st.session_state.vardas,
                             st.session_state.pavarde,
-                            st.session_state.gim_data.isoformat()
-                            if st.session_state.gim_data else "",
+                            st.session_state.gim_data.isoformat() if st.session_state.gim_data else "",
                             st.session_state.tautybe.split("(")[-1][:-1]
-                            if "(" in st.session_state.tautybe else st.session_state.tautybe,
-                            "",  # naujam nepriskirtam vairuotojui kadencijos_pabaiga = ""
+                                if "(" in st.session_state.tautybe else st.session_state.tautybe,
+                            "",
                             st.session_state.atost_pab.isoformat() if st.session_state.atost_pab else ""
                         )
                     )
@@ -253,10 +249,10 @@ def show(conn, c):
         st.info("ℹ️ Nėra vairuotojų.")
         return
 
-    # 6.1) Mygtukas „➕ Pridėti vairuotoją“ per visą plotį virš filtrų
+    # 6.1) Mygtukas „➕ Pridėti vairuotoją“ per visą plotį, prieš filtrus
     st.button("➕ Pridėti vairuotoją", on_click=new_vair, use_container_width=True)
 
-    # 6.2) Paruošiame duomenis rodymui: įtraukiame 'id', pildome None → ''
+    # 6.2) Paruošiame duomenis rodymui: įtraukiame 'id', užpildome None → ''
     df = df.fillna("")
     df_disp = df[[
         "id", "vardas", "pavarde", "gimimo_metai", "tautybe",
@@ -274,34 +270,63 @@ def show(conn, c):
         inplace=True,
     )
 
-    # 6.3) Pridedame stulpelį „Priskirtas vilkikas“ pagal vilkikų modulio duomenis
+    # 6.3) Override rodinius pagal priskyrimą:
+    #      - Jei vairuotojas priskirtas (jo vardas yra driver_to_vilk),
+    #        tuomet:
+    #          * jeigu Kadencijos pabaigos laukas tuščias → rodyti "trūksta datos"
+    #          * jei nurodyta, rodyti datą
+    #          * Atostogų pabaiga privalo būti tuščia
+    #      - Jei nepriskirtas:
+    #          * jeigu Atostogų pabaigos laukas tuščias → rodyti "trūksta datos"
+    #          * jei nurodyta, rodyti datą
+    #          * Kadencijos pabaiga privalo būti tuščia
+    kad_vals = []
+    atost_vals = []
+    for _, row in df.iterrows():
+        name = f"{row['vardas']} {row['pavarde']}"
+        assigned_vilk = driver_to_vilk.get(name)
+        if assigned_vilk:
+            # Priskirtas
+            kad_date = row.get("kadencijos_pabaiga", "")
+            # jei laukas tuščias, rodyti "trūksta datos"
+            kad_vals.append(kad_date if kad_date else "trūksta datos")
+            # Atostogų pabaiga neturi rodyti, visada tuščia
+            atost_vals.append("")
+        else:
+            # Nepriskirtas
+            atost_date = row.get("atostogu_pabaiga", "")
+            atost_vals.append(atost_date if atost_date else "trūksta datos")
+            kad_vals.append("")
+
+    df_disp["Kadencijos pabaiga"] = kad_vals
+    df_disp["Atostogų pabaiga"] = atost_vals
+
+    # 6.4) Pridedame stulpelį "Priskirtas vilkikas"
     assigned = []
     for _, row in df.iterrows():
         name = f"{row['vardas']} {row['pavarde']}"
         assigned.append(driver_to_vilk.get(name, ""))
     df_disp["Priskirtas vilkikas"] = assigned
 
-    # 6.4) Filtravimo laukai (vieninteliai header'iai po filtrų)
+    # 6.5) Filtravimo laukai (vieninteliai, po jų – lentelės header)
     filter_cols = st.columns(len(df_disp.columns) + 1)
     for i, col in enumerate(df_disp.columns):
         filter_cols[i].text_input(col, key=f"f_{col}")
-    filter_cols[-1].write("")
+    filter_cols[-1].write("")  # paskutinis stulpelis skirtas vietai, be įvesties
 
     df_filt = df_disp.copy()
     for col in df_disp.columns:
         val = st.session_state.get(f"f_{col}", "")
         if val:
-            df_filt = df_filt[
-                df_filt[col].astype(str).str.contains(val, case=False, na=False)
-            ]
+            df_filt = df_filt[df_filt[col].astype(str).str.contains(val, case=False, na=False)]
 
-    # 6.5) Lentelės antraštės blokas po filtrų
+    # 6.6) Vienintelis lentelės antraštės blokas po filtrų
     hdr = st.columns(len(df_filt.columns) + 1)
     for i, col in enumerate(df_filt.columns):
         hdr[i].markdown(f"**{col}**")
     hdr[-1].markdown("**Veiksmai**")
 
-    # 6.6) Lentelės eilutės su redagavimo mygtuku
+    # 6.7) Lentelės eilutės su redagavimo mygtuku
     for _, row in df_filt.iterrows():
         row_cols = st.columns(len(df_filt.columns) + 1)
         for i, col in enumerate(df_filt.columns):
@@ -313,7 +338,7 @@ def show(conn, c):
             args=(row["id"],),
         )
 
-    # 6.7) Eksportas į CSV
+    # 6.8) Eksportas į CSV
     csv = df.to_csv(index=False, sep=";").encode("utf-8")
     st.download_button(
         label="💾 Eksportuoti kaip CSV",
