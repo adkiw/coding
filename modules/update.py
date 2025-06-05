@@ -60,7 +60,7 @@ def format_time_str(input_str):
     return input_str
 
 def show(conn, c):
-    st.title("DISPO – Vilkikų ir krovinių atnaujinimas (Update)")
+    st.title("Padėties atnaujinimai")
 
     # ==============================
     # 1) Užtikriname, kad lentelėje "vilkiku_darbo_laikai" būtų visi stulpeliai
@@ -196,29 +196,29 @@ def show(conn, c):
 
     headers = [
         ("💾",       "Save"),      # Save
-        ("Atn.",     "Atnaujinta:"),# Atnaujinta:
+        ("Atn.",     "Atnaujinimo laikas"),# Atnaujinta:
         ("Vilk.",    "Vilkikas"),  # Vilkikas
         ("Priek.",   "Priekaba"),  # Priekaba
-        ("P.D.",     "Pakr. data"),# Pakr. data
-        ("P.L.",     "Pakr. laikas"),# Pakr. laikas
-        ("P.V.",     "Pakrov. vieta"),# Pakrovimo vieta
-        ("I.D.",     "Iškr. data"),# Iškr. data
-        ("I.L.",     "Iškr. laikas"),# Iškr. laikas
-        ("I.V.",     "Iškr. vieta"),# Iškr. vieta
-        ("Km",       "Km"),        # Km
+        ("P.D.",     "Pakrovimo data"),# Pakr. data
+        ("P.L.",     "Pakrovimo laikas"),# Pakr. laikas
+        ("P.V.",     "Pakrovimo vieta"),# Pakrovimo vieta
+        ("I.D.",     "Iškrovimo data"),# Iškr. data
+        ("I.L.",     "Iškrovimo laikas"),# Iškr. laikas
+        ("I.V.",     "Iškrovimo vieta"),# Iškr. vieta
+        ("Km",       "Kilometražas"),        # Km
         ("T.Gr.",    "Transporto grupė"), # Transporto grupė
         ("T.Vad.",   "Transporto vadybininkas"),# Transporto vadybininkas
         ("E.Gr.",    "Ekspedicinė grupė"),# Ekspedicinė grupė
         ("E.Vad.",   "Ekspedicijos vadybininkas"),# Ekspedicijos vadybininkas
-        ("SA",       "SA"),        # SA
-        ("BDL",      "BDL"),       # BDL
-        ("LDL",      "LDL"),       # LDL
-        ("P.D.*",    "Pakr. data (edit)"),# Pakr. data (edit)
-        ("P.L.*",    "Pakr. laikas (edit)"),# Pakr. laikas (edit)
-        ("P.St.*",   "Pakr. statusas"),# Pakr. statusas (edit)
-        ("I.D.*",    "Iškr. data (edit)"),# Iškr. data (edit)
-        ("I.L.*",    "Iškr. laikas (edit)"),# Iškr. laikas (edit)
-        ("I.St.*",   "Iškr. statusas"),# Iškr. statusas (edit)
+        ("SA",       "Savaitinė atstova"),        # SA
+        ("BDL",      "Vairuotojo bendro darbo laiko pabaiga"),       # BDL
+        ("LDL",      "Vairuotojo likusios darbo valandos po atvykimo"),       # LDL
+        ("P.D.*",    "Planuojamo atvykimo į pakrovima data"),# Pakr. data (edit)
+        ("P.L.*",    "Planuojamo atvykimo į pakrovimą laikas"),# Pakr. laikas (edit)
+        ("P.St.*",   "Pakrovimo statusas statusas"),# Pakr. statusas (edit)
+        ("I.D.*",    "Planuojamo atvykimo į iškrovimą data"),# Iškr. data (edit)
+        ("I.L.*",    "Planuojamo atvykimo į iškrovimą laikas"),# Iškr. laikas (edit)
+        ("I.St.*",   "Iškrovimo statusas"),# Iškr. statusas (edit)
         ("Kom.",     "Komentaras") # Komentaras
     ]
 
