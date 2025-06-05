@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 
@@ -46,36 +45,44 @@ def show(conn, c):
     if 'selected_client' not in st.session_state:
         st.session_state.selected_client = None
 
-    # 4. List view
+    # 4. List view (no headers above or below filters; placeholders inside filter inputs)
     if st.session_state.selected_client is None:
         # Load data
         df = pd.read_sql(
             "SELECT id, pavadinimas, salis, regionas, miestas, likes_limitas AS limito_likutis FROM klientai",
             conn
         )
-        # Filters above headers
+        if df.empty:
+            st.info("ℹ️ Nėra klientų.")
+            return
+
+        # Replace NaN with empty strings for display
+        df = df.fillna('')
+
+        # Filters with placeholders (no header labels above or below)
         filter_cols = st.columns(len(df.columns) + 1)
         for i, col in enumerate(df.columns):
-            filter_cols[i].text_input(f"🔍 {col}", key=f"f_{col}")
+            filter_cols[i].text_input(label="", placeholder=col, key=f"f_{col}")
         filter_cols[-1].write("")
+
+        # Apply filters
+        df_filt = df.copy()
         for col in df.columns:
             val = st.session_state.get(f"f_{col}", "")
             if val:
-                df = df[df[col].astype(str).str.contains(val, case=False, na=False)]
-        # Header row
-        hdr = st.columns(len(df.columns) + 1)
-        for i, col in enumerate(df.columns):
-            hdr[i].markdown(f"**{col}**")
-        hdr[-1].markdown("**Veiksmai**")
-        # Data rows with spacing
-        for _, row in df.iterrows():
-            row_cols = st.columns(len(df.columns) + 1)
-            for i, col in enumerate(df.columns):
+                df_filt = df_filt[df_filt[col].astype(str).str.contains(val, case=False, na=False)]
+
+        # Data rows with edit button (no header row)
+        for _, row in df_filt.iterrows():
+            row_cols = st.columns(len(df_filt.columns) + 1)
+            for i, col in enumerate(df_filt.columns):
                 row_cols[i].write(row[col])
             row_cols[-1].button(
-                "✏️", key=f"edit_{row['id']}", on_click=start_edit, args=(row['id'],)
+                "✏️",
+                key=f"edit_{row['id']}",
+                on_click=start_edit,
+                args=(row['id'],)
             )
-            st.markdown("<div style='height:1cm'></div>", unsafe_allow_html=True)
         return
 
     # 5. Detail / new form
@@ -290,7 +297,7 @@ def show(conn, c):
             if new_liks < 0:
                 new_liks = 0.0
 
-            # Update všetky rows where vat_numeris = vat
+            # Update all rows where vat_numeris = vat
             c.execute("""
                 UPDATE klientai
                 SET coface_limitas = ?, musu_limitas = ?, likes_limitas = ?
@@ -301,4 +308,4 @@ def show(conn, c):
             st.success("✅ Duomenys įrašyti ir limitai atnaujinti visiems su tuo pačiu VAT numeriu.")
             clear_selection()
         except Exception as e:
-            st.error(f"❌ Klaida: {e}") 
+            st.error(f"❌ Klaida: {e}")
