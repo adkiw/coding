@@ -105,7 +105,7 @@ def show(conn, c):
     df["regionas"] = df["regionas"].fillna("").astype(str)
     df["data"] = pd.to_datetime(df["data"]).dt.date.astype(str)
     df["pak_data"] = pd.to_datetime(df["pak_data"]).dt.date.astype(str)
-    df["vietos_kodas"] = df["salis"] + df["regionas"]  # pvz. "IT10"
+    df["vietos_kodas"] = df["salis"] + df["regionas"]
 
     # ==============================
     # 7) Filtravimas pagal ekspedicijos grupę
@@ -251,11 +251,12 @@ def show(conn, c):
     pivot_df.index.name = "Vilkikas/Priekaba Vadybininkas SA"
 
     # ==============================
-    # 16) Užpildome visus likusius NaN/None kaip tuščias eilutes
+    # 16) Atvaizduojame su st.dataframe, paryškiname headerius
     # ==============================
-    pivot_df = pivot_df.fillna("")
-
-    # ==============================
-    # 17) Atvaizduojame su st.dataframe, kad būtų interaktyvus ir galima rūšiuoti paspaudus ant datos
-    # ==============================
-    st.dataframe(pivot_df, use_container_width=True)
+    styled_df = pivot_df.style.set_table_styles([
+        {
+            'selector': 'th',
+            'props': [('font-weight', 'bold')]
+        }
+    ])
+    st.dataframe(styled_df, use_container_width=True)
