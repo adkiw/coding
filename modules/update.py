@@ -36,6 +36,11 @@ st.markdown("""
       span[data-baseweb="select"] svg {
         display: none !important;
       }
+      /* Praplečiame vilkiko numerio langelį ir paryškiname */
+      .vilk-cell {
+        background-color: #f0f8ff;
+        font-weight: bold;
+      }
     </style>
 """, unsafe_allow_html=True)
 
@@ -66,18 +71,10 @@ def relative_time(created_str):
         return ""
     now = pd.Timestamp.now()
     delta = now - created
-    days = delta.days
-    secs = delta.seconds
-    hours = secs // 3600
-    minutes = (secs % 3600) // 60
-
-    if days > 0:
-        return f"{days} d."
-    if hours > 0:
-        return f"{hours} val."
-    if minutes > 0:
-        return f"{minutes}"
-    return ""
+    total_seconds = int(delta.total_seconds())
+    hours = total_seconds // 3600
+    minutes = (total_seconds % 3600) // 60
+    return f"{hours:02d}:{minutes:02d}"
 
 def show(conn, c):
     st.title("Padėties atnaujinimai")
@@ -183,13 +180,12 @@ def show(conn, c):
     """).fetchall())
 
     # ==============================
-    # 6) Stulpelių proporcijos
+    # 6) Stulpelių proporcijos (vienetai proporcingi)
     # ==============================
     col_widths = [
         0.5,   # Save
-        0.85,  # Atn.
-        0.4,   # Vilk.
-        0.4,   # Priek.
+        0.85,  # Atnaujinta prieš
+        0.6,   # Vilkikas
         0.7,   # P.D.
         0.7,   # P.L.
         1.0,   # P.V.
@@ -197,7 +193,7 @@ def show(conn, c):
         0.7,   # I.L.
         1.0,   # I.V.
         0.6,   # Km
-        0.45,  # E.Vad.
+        0.8,   # E.Vad.
         0.45,  # SA
         0.45,  # BDL
         0.45,  # LDL
@@ -212,27 +208,26 @@ def show(conn, c):
 
     headers = [
         ("💾",      "Save"),                    # Save
-        ("Atn.",    "Atnaujinta (kiek laiko)"), # Atn.
-        ("Vilk.",   "Vilkikas"),                # Vilk.
-        ("Priek.",  "Priekaba"),                 # Priek.
-        ("P.D.",    "Pakrovimo data"),           # P.D.
-        ("P.L.",    "Pakrovimo laikas"),         # P.L.
-        ("P.V.",    "Pakrovimo vieta"),          # P.V.
-        ("I.D.",    "Iškrovimo data"),           # I.D.
-        ("I.L.",    "Iškrovimo laikas"),         # I.L.
-        ("I.V.",    "Iškrovimo vieta"),          # I.V.
-        ("Km",      "Kilometražas"),             # Km
+        ("Atnaujinta prieš", "Laikas"),         # Atnaujinta prieš
+        ("Vilk.",   "Vilkikas"),                # Vilkikas
+        ("P.D.",    "Pakrovimo data"),          # P.D.
+        ("P.L.",    "Pakrovimo laikas"),        # P.L.
+        ("P.V.",    "Pakrovimo vieta"),         # P.V.
+        ("I.D.",    "Iškrovimo data"),          # I.D.
+        ("I.L.",    "Iškrovimo laikas"),        # I.L.
+        ("I.V.",    "Iškrovimo vieta"),         # I.V.
+        ("Km",      "Kilometražas"),            # Km
         ("E.Vad.",  "Ekspedicijos vadybininkas"),# E.Vad.
-        ("SA",      "Savaitinė atstova"),        # SA
-        ("BDL",     "Vairuotojo darbo laiko pabaiga"),  # BDL
-        ("LDL",     "Vairuotojo likusios darbo valandos"), # LDL
-        ("P.D.*",   "Planuojamas P.D."),          # P.D.* 
-        ("P.L.*",   "Planuojamas P.L."),          # P.L.* 
-        ("P.St.*",  "Pakrovimo statusas"),        # P.St.* 
-        ("I.D.*",   "Planuojamas I.D."),          # I.D.* 
-        ("I.L.*",   "Planuojamas I.L."),          # I.L.* 
-        ("I.St.*",  "Iškrovimo statusas"),        # I.St.* 
-        ("Kom.",    "Komentaras")                 # Kom.
+        ("SA",      "Savaitinė atstova"),       # SA
+        ("BDL",     "Darbo laiko pabaiga"),      # BDL
+        ("LDL",     "Likusios darbo valandos"),  # LDL
+        ("P.D.*",   "Planuojamas P.D."),         # P.D.* 
+        ("P.L.*",   "Planuojamas P.L."),         # P.L.* 
+        ("P.St.*",  "Pakrovimo statusas"),       # P.St.* 
+        ("I.D.*",   "Planuojamas I.D."),         # I.D.* 
+        ("I.L.*",   "Planuojamas I.L."),         # I.L.* 
+        ("I.St.*",  "Iškrovimo statusas"),       # I.St.* 
+        ("Kom.",    "Komentaras")                # Kom.
     ]
 
     # ==============================
@@ -244,7 +239,7 @@ def show(conn, c):
         cols[i].markdown(f"<b title='{full}'>{abbr}</b>", unsafe_allow_html=True)
 
     # ==============================
-    # 8) Rodyti kiekvieną krovinį – vienoje eilutėje
+    # 8) Rodyti kiekvieną krovinį – viskas vienoje eilutėje
     # ==============================
     for k in kroviniai:
         darbo = c.execute("""
@@ -281,108 +276,112 @@ def show(conn, c):
         pk_data     = darbo[6] if darbo and darbo[6] else str(k[3])
         komentaras  = darbo[10] if darbo and darbo[10] else ""
         eksp_vad    = darbo[12] if darbo and darbo[12] else k[16] if len(k) > 16 else ""
-        trans_gr    = ""  # pašalintas
-        eksp_gr     = ""  # pašalintas
+        # trans_gr, eksp_gr išimti
+        trans_gr    = ""
+        eksp_gr     = ""
 
         row_cols = st.columns(col_widths)
 
         # 8.4) Save mygtukas
         save = row_cols[0].button("💾", key=f"save_{k[0]}")
 
-        # 8.5) Atnaujinta (tik relative laikas be 'prieš' ir 'min')
+        # 8.5) Atnaujinta prieš (HH:MM)
         row_cols[1].write(rel_atn)
 
-        # 8.6) Vilkikas
-        row_cols[2].write(str(k[5])[:7])
-        # 8.7) Priekaba
-        row_cols[3].write(str(k[6])[:7])
-        # 8.8) Pakrovimo data (originali)
-        row_cols[4].write(str(k[3]))
-        # 8.9) Pakrovimo laikas (originalus)
-        row_cols[5].write(
+        # 8.6) Vilkikas (išplėstas, paryškintas)
+        vilk_text = f"<span class='vilk-cell'>{str(k[5])}</span>"
+        row_cols[2].markdown(vilk_text, unsafe_allow_html=True)
+
+        # 8.7) Pakrovimo data (originali)
+        row_cols[3].write(str(k[3]))
+        # 8.8) Pakrovimo laikas (originalus)
+        row_cols[4].write(
             str(k[7])[:5] + (f" - {str(k[8])[:5]}" if k[8] else "")
         )
-        # 8.10) Pakrovimo vieta
+        # 8.9) Pakrovimo vieta
         vieta_pk = f"{k[11] or ''}{k[12] or ''}"
-        row_cols[6].write(vieta_pk[:18])
-        # 8.11) Iškr. data (originali)
-        row_cols[7].write(str(k[4]))
-        # 8.12) Iškr. laikas (originalus)
-        row_cols[8].write(
+        row_cols[5].write(vieta_pk[:18])
+        # 8.10) Iškr. data (originali)
+        row_cols[6].write(str(k[4]))
+        # 8.11) Iškr. laikas (originalus)
+        row_cols[7].write(
             str(k[9])[:5] + (f" - {str(k[10])[:5]}" if k[10] else "")
         )
-        # 8.13) Iškr. vieta
+        # 8.12) Iškr. vieta
         vieta_is = f"{k[13] or ''}{k[14] or ''}"
-        row_cols[9].write(vieta_is[:18])
-        # 8.14) Km
-        row_cols[10].write(str(k[15]))
+        row_cols[8].write(vieta_is[:18])
+        # 8.13) Km
+        row_cols[9].write(str(k[15]))
 
-        # 8.15) Ekspedicijos vadybininkas
-        row_cols[11].write(eksp_vad or "")
+        # 8.14) Ekspedicijos vadybininkas
+        row_cols[10].write(eksp_vad or "")
 
-        # 8.16) SA – įvesties langelis
-        sa_in = row_cols[12].text_input("", value=str(sa), key=f"sa_{k[0]}", label_visibility="collapsed")
-        # 8.17) BDL – įvesties langelis
-        bdl_in = row_cols[13].text_input("", value=str(bdl), key=f"bdl_{k[0]}", label_visibility="collapsed")
-        # 8.18) LDL – įvesties langelis
-        ldl_in = row_cols[14].text_input("", value=str(ldl), key=f"ldl_{k[0]}", label_visibility="collapsed")
+        # 8.15) SA – tekstinis įvesties langelis
+        sa_in = row_cols[11].text_input("", value=str(sa), key=f"sa_{k[0]}", label_visibility="collapsed")
+        # 8.16) BDL – tekstinis įvesties langelis
+        bdl_in = row_cols[12].text_input("", value=str(bdl), key=f"bdl_{k[0]}", label_visibility="collapsed")
+        # 8.17) LDL – tekstinis įvesties langelis
+        ldl_in = row_cols[13].text_input("", value=str(ldl), key=f"ldl_{k[0]}", label_visibility="collapsed")
 
-        # 8.19) Pakrovimo data (edit)
+        # 8.18) Pakrovimo data (edit)
         try:
             default_pk_date = datetime.fromisoformat(pk_data).date()
         except:
             default_pk_date = datetime.now().date()
         pk_data_key = f"pk_date_{k[0]}"
-        pk_data_in = row_cols[15].date_input(
+        pk_data_in = row_cols[14].date_input(
             "", value=default_pk_date, key=pk_data_key, label_visibility="collapsed"
         )
 
-        # 8.20) Pakrovimo laikas (edit)
+        # 8.19) Pakrovimo laikas (edit)
         pk_time_key = f"pk_time_{k[0]}"
         formatted_pk = format_time_str(pk_laikas) if pk_laikas else ""
-        pk_laikas_in = row_cols[16].text_input(
+        pk_laikas_in = row_cols[15].text_input(
             "", value=formatted_pk, key=pk_time_key, label_visibility="collapsed", placeholder="HHMM"
         )
 
-        # 8.21) Pakrovimo statusas – įvesties laukas su placeholder
-        pk_status_key = f"pk_status_{k[0]}"
-        pk_status_in = row_cols[17].text_input(
-            "", value=pk_status, key=pk_status_key, label_visibility="collapsed",
-            placeholder="Atvyko / Pakrauta / Kita"
+        # 8.20) Pakrovimo statusas – drop list
+        pk_status_options = ["", "Atvyko", "Pakrauta", "Kita"]
+        default_pk_status_idx = pk_status_options.index(pk_status) if pk_status in pk_status_options else 0
+        pk_status_in = row_cols[16].selectbox(
+            "", options=pk_status_options, index=default_pk_status_idx,
+            key=f"pk_status_{k[0]}", label_visibility="collapsed"
         )
 
-        # 8.22) Iškr. data (edit)
+        # 8.21) Iškr. data (edit)
         try:
             ikr_data = darbo[9] if darbo and darbo[9] else str(k[4])
             default_ikr_date = datetime.fromisoformat(ikr_data).date()
         except:
             default_ikr_date = datetime.now().date()
         ikr_data_key = f"ikr_date_{k[0]}"
-        ikr_data_in = row_cols[18].date_input(
+        ikr_data_in = row_cols[17].date_input(
             "", value=default_ikr_date, key=ikr_data_key, label_visibility="collapsed"
         )
 
-        # 8.23) Iškr. laikas (edit)
+        # 8.22) Iškr. laikas (edit)
         ikr_laikas = darbo[8] if darbo and darbo[8] else (str(k[9])[:5] if k[9] else "")
         ikr_time_key = f"ikr_time_{k[0]}"
         formatted_ikr = format_time_str(ikr_laikas) if ikr_laikas else ""
-        ikr_laikas_in = row_cols[19].text_input(
+        ikr_laikas_in = row_cols[18].text_input(
             "", value=formatted_ikr, key=ikr_time_key, label_visibility="collapsed", placeholder="HHMM"
         )
 
-        # 8.24) Iškr. statusas – įvesties laukas su placeholder
-        ikr_status_key = f"ikr_status_{k[0]}"
-        ikr_status_in = row_cols[20].text_input(
-            "", value=darbo[7] if darbo and darbo[7] else "", key=ikr_status_key, label_visibility="collapsed",
-            placeholder="Atvyko / Iškrauta / Kita"
+        # 8.23) Iškr. statusas – drop list
+        ikr_status = darbo[7] if darbo and darbo[7] else ""
+        ikr_status_options = ["", "Atvyko", "Iškrauta", "Kita"]
+        default_ikr_status_idx = ikr_status_options.index(ikr_status) if ikr_status in ikr_status_options else 0
+        ikr_status_in = row_cols[19].selectbox(
+            "", options=ikr_status_options, index=default_ikr_status_idx,
+            key=f"ikr_status_{k[0]}", label_visibility="collapsed"
         )
 
-        # 8.25) Komentaras (edit)
-        komentaras_in = row_cols[21].text_input(
+        # 8.24) Komentaras (edit)
+        komentaras_in = row_cols[20].text_input(
             "", value=komentaras, key=f"komentaras_{k[0]}", label_visibility="collapsed"
         )
 
-        # 8.26) Išsaugojimo (Save) logika
+        # 8.25) Išsaugojimo (Save) logika
         if save:
             jau_irasas = c.execute("""
                 SELECT id FROM vilkiku_darbo_laikai WHERE vilkiko_numeris = ? AND data = ?
