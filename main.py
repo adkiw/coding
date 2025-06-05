@@ -1,5 +1,3 @@
-# main.py
-
 import streamlit as st
 import sqlite3
 
@@ -32,9 +30,8 @@ st.markdown("""
 conn = sqlite3.connect("dispo_new.db", check_same_thread=False)
 c = conn.cursor()
 
-# 4) Importuojame modulius
+# 4) Importuojame modulius (Dispo modulis pašalintas)
 from modules import (
-    dispo,
     kroviniai,
     vilkikai,
     priekabos,
@@ -43,13 +40,12 @@ from modules import (
     klientai,
     darbuotojai,
     nustatymai,
-    update,
-    planavimas
+    planavimas,
+    update
 )
 
 # 5) Tiesiai viršuje – horizontalus mygtukų baras (radio be užrašų)
 moduliai = [
-    "Dispo",
     "Kroviniai",
     "Vilkikai",
     "Priekabos",
@@ -64,9 +60,7 @@ moduliai = [
 pasirinktas = st.radio("", moduliai, horizontal=True)
 
 # 6) Pagal pasirinktą modulį kviečiame atitinkamą funkciją
-if pasirinktas == "Dispo":
-    dispo.show(conn, c)
-elif pasirinktas == "Kroviniai":
+if pasirinktas == "Kroviniai":
     kroviniai.show(conn, c)
 elif pasirinktas == "Vilkikai":
     vilkikai.show(conn, c)
