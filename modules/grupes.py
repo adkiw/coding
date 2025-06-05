@@ -49,7 +49,7 @@ def show(conn, c):
     if st.session_state["show_add_form"]:
         st.subheader("➕ Naujos grupės forma")
         with st.form("grupes_forma", clear_on_submit=True):
-            numeris    = st.text_input("Grupės numeris (pvz., EKSP6 arba TR6)")
+            numeris     = st.text_input("Grupės numeris (pvz., EKSP6 arba TR6)")
             pavadinimas = st.text_input("Pavadinimas")
             aprasymas   = st.text_area("Aprašymas")
             save_btn    = st.form_submit_button("💾 Išsaugoti grupę")
@@ -103,12 +103,17 @@ def show(conn, c):
     if kodas.startswith("TR"):
         st.subheader(f"🚚 Transporto grupė: {pasirinkta_grupe}")
 
+        #  –––––––– PAKEISTAS UŽKLAUSOS JOIN sąlyga ––––––––
+        # Buvo: JOIN darbuotojai d ON v.vadybininkas = d.vardas
+        # Dabar: jungiamas vardas + tarpas + pavardė prie pilno lauko v.vadybininkas
         query = """
-            SELECT v.numeris AS vilkiko_numeris,
-                   v.priekaba,
-                   v.vadybininkas
+            SELECT
+                v.numeris     AS vilkiko_numeris,
+                v.priekaba,
+                v.vadybininkas
             FROM vilkikai v
-            JOIN darbuotojai d ON v.vadybininkas = d.vardas
+            JOIN darbuotojai d
+              ON v.vadybininkas = (d.vardas || ' ' || d.pavarde)
             WHERE d.grupe = ?
             ORDER BY v.numeris
         """
@@ -158,7 +163,9 @@ def show(conn, c):
                 if not regionu_input.strip():
                     st.error("❌ Įveskite bent vieną regiono kodą.")
                 else:
-                    įvesti_regionai = [r.strip().upper() for r in regionu_input.split(";") if r.strip()]
+                    įvesti_regionai = [
+                        r.strip().upper() for r in regionu_input.split(";") if r.strip()
+                    ]
                     if not įvesti_regionai:
                         st.error("❌ Nepavyko atpažinti jokių regionų kodų.")
                     else:
