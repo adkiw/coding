@@ -8,23 +8,7 @@ def show(conn, c):
     st.title("DISPO – Planavimas")
 
     # ==============================
-    # 0) Patikriname, ar lentelėje "kroviniai" yra reikiami stulpeliai.
-    #    Jei jų nėra, pridedame per ALTER TABLE.
-    # ==============================
-    existing_cols = {r[1] for r in c.execute("PRAGMA table_info(kroviniai)").fetchall()}
-    needed_cols = {
-        'pakrovimo_salis':    'TEXT',
-        'pakrovimo_regionas': 'TEXT',
-        'iskrovimo_salis':    'TEXT',
-        'iskrovimo_regionas': 'TEXT'
-    }
-    for col, coltype in needed_cols.items():
-        if col not in existing_cols:
-            c.execute(f"ALTER TABLE kroviniai ADD COLUMN {col} {coltype}")
-    conn.commit()
-
-    # ==============================
-    # 1) CSS stilius lentelės atvaizdavimui su horizontaliniu skrolu
+    # 0) CSS stilius lentelės atvaizdavimui su horizontaliniu skrolu
     # ==============================
     st.markdown("""
     <style>
@@ -46,7 +30,7 @@ def show(conn, c):
     """, unsafe_allow_html=True)
 
     # ==============================
-    # 2) Užkrauname visas ekspedicijos grupes (id, numeris, pavadinimas)
+    # 1) Užkrauname visas ekspedicijos grupes (id, numeris, pavadinimas)
     # ==============================
     c.execute("SELECT id, numeris, pavadinimas FROM grupes ORDER BY numeris")
     grupes = c.fetchall()  # [(id, numeris, pavadinimas), ...]
@@ -55,11 +39,11 @@ def show(conn, c):
     selected = st.selectbox("Pasirinkti ekspedicijos grupę", group_options)
 
     # ==============================
-    # 3) Apskaičiuojame datų intervalą: nuo vakar iki dviejų savaičių į priekį
+    # 2) Apskaičiuojame datų intervalą: nuo vakar iki dviejų savaičių į priekį
     # ==============================
     today = datetime.date.today()
     start_date = today - datetime.timedelta(days=1)
-    end_date = today + datetime.timedelta(days=14)
+    end_date = today + datetime.timedelta(days=14)  # dvi savaitės į priekį
 
     date_list = [
         start_date + datetime.timedelta(days=i)
@@ -68,21 +52,25 @@ def show(conn, c):
     date_strs = [d.isoformat() for d in date_list]  # pvz. ['2025-06-03', ..., '2025-06-17']
 
     # ==============================
-    # 4) Paimame visų vilkikų informaciją: numeris, priekaba, vadybininkas
+    # 3) Paimame visų vilkikų informaciją: numeris, priekaba, vadybininkas
     # ==============================
     c.execute("SELECT numeris, priekaba, vadybininkas FROM vilkikai ORDER BY numeris")
     vilkikai_rows = c.fetchall()  # [(numeris, priekaba, vadybininkas), ...]
     vilkikai_all = [row[0] for row in vilkikai_rows]
 
-    priekaba_map = {row[0]: (row[1] or "") for row in vilkikai_rows}
-    vadybininkas_map = {row[0]: (row[2] or "") for row in vilkikai_rows}
+    priekaba_map = { row[0]: (row[1] or "") for row in vilkikai_rows }
+    vadybininkas_map = { row[0]: (row[2] or "") for row in vilkikai_rows }
 
     # ==============================
-    # 5) Iš lentelės "kroviniai" paimame įrašus su iškrovimo data šiame intervale
-    #    – ištraukiame vilkikas, iskrovimo_salis, iskrovimo_regionas, date(iskrovimo_data), date(pakrovimo_data)
+    # 4) Iš lentelės "kroviniai" paimame:
+    #    – vilkikas
+    #    – iskrovimo_salis, iskrovimo_regionas → „vietos_kodas“
+    #    – date(iskrovimo_data) AS data (vien tik data)
+    #    – date(pakrovimo_data)   AS pak_data
+    #    Filtruojame pagal date(iskrovimo_data) intervalą.
     # ==============================
     start_str = start_date.isoformat()
-    end_str = end_date.isoformat()
+    end_str   = end_date.isoformat()
     query = f"""
         SELECT
             vilkikas AS vilkikas,
@@ -102,16 +90,16 @@ def show(conn, c):
         return
 
     # ==============================
-    # 6) Konvertuojame „salis“ ir „regionas“ į tekstą, sujungiame į „vietos_kodas“
+    # 5) Konvertuojame „salis“ ir „regionas“ į tekstą, sujungiame į „vietos_kodas“
     # ==============================
-    df["salis"] = df["salis"].fillna("").astype(str)
+    df["salis"]    = df["salis"].fillna("").astype(str)
     df["regionas"] = df["regionas"].fillna("").astype(str)
-    df["data"] = pd.to_datetime(df["data"]).dt.date.astype(str)
+    df["data"]     = pd.to_datetime(df["data"]).dt.date.astype(str)
     df["pak_data"] = pd.to_datetime(df["pak_data"]).dt.date.astype(str)
     df["vietos_kodas"] = df["salis"] + df["regionas"]  # pvz. "IT10"
 
     # ==============================
-    # 7) Filtravimas pagal ekspedicijos grupę (jei pasirinkta ne „Visi“)
+    # 6) Filtravimas pagal ekspedicijos grupę (jei pasirinkta ne „Visi“)
     # ==============================
     if selected != "Visi":
         numeris = selected.split(" – ")[0]
@@ -129,20 +117,22 @@ def show(conn, c):
         return
 
     # ==============================
-    # 8) Parenkame tik paskutinį (didžiausią) kiekvieno vilkiko įrašą šiame intervale
+    # 7) Kiekvienam vilkikui parenkame tik paskutinį įrašą („data“ stulpelyje didžiausia reikšmė)
     # ==============================
     df_last = df.loc[df.groupby("vilkikas")["data"].idxmax()].copy()
-    # df_last turi stulpelius: vilkikas, salis, regionas, data, pak_data, vietos_kodas
+    # df_last turi stulpelius: vilkikas, salis, regionas, data (iškrovimo), pak_data (pakrovimo)
 
     # ==============================
-    # 9) Iš lentelės "vilkiku_darbo_laikai" paimame papildomus laukus pagal pakrovimo datą:
-    #    – iškrovimo_laikas (ikr_laikas)
-    #    – darbo_laikas    (bdl)
-    #    – likes_laikas    (ldl)
+    # 8) Iš lentelės "vilkiku_darbo_laikai" paimame:
+    #    – iškrovimo_laikas („iskrovimo_laikas“)
+    #    – darbo_laikas    („darbo_laikas“)
+    #    – likes_laikas    („likes_laikas“)
+    #
+    #    Filtruojame pagal `data = pak_data`
     # ==============================
     papildomi_map = {}
     for _, row in df_last.iterrows():
-        v = row["vilkikas"]
+        v     = row["vilkikas"]
         pak_d = row["pak_data"]  # pvz. "2025-06-07"
         rc = c.execute(
             """
@@ -159,6 +149,7 @@ def show(conn, c):
         else:
             ikr_laikas, bdl, ldl = None, None, None
 
+        # Jei None arba NaN → paverčiame į tuščią stringą
         if ikr_laikas is None or (isinstance(ikr_laikas, float) and pd.isna(ikr_laikas)):
             ikr_laikas = ""
         else:
@@ -174,6 +165,7 @@ def show(conn, c):
         else:
             ldl = str(ldl)
 
+        # Saugojame pagal raktą (vilkiko numeris, iškrovimo data)
         papildomi_map[(v, row["data"])] = {
             "ikr_laikas": ikr_laikas,
             "bdl":         bdl,
@@ -181,22 +173,32 @@ def show(conn, c):
         }
 
     # ==============================
-    # 10) Paruošiame funkciją formuoti langelio reikšmę:
-    #     – vietos_kodas ikr_laikas_or_-- bdl_or_-- ldl_or_--
-    #     – jeigu vietos_kodas tuščias: tuščias langelis
+    # 9) Paruošiame stulpelį "cell_val":
+    #    – vienoje eilutėje: [vietos_kodas] [ikr_laikas or "--"] [bdl or "--"] [ldl or "--"]
+    #    – jeigu „vietos_kodas“ tuščias → grąžinam tuščią stringą
     # ==============================
     def make_cell(vilkikas, iskr_data, vieta):
         if not vieta:
-            return ""
+            return ""  # jei regiono nėra, tuščias langelis
+
         info = papildomi_map.get((vilkikas, iskr_data), {})
         parts = []
+
+        # regiono kodas (pvz. “IT10”)
         parts.append(vieta)
+
+        # iškrovimo laikas arba "--"
         ikr = info.get("ikr_laikas", "")
         parts.append(ikr if ikr else "--")
+
+        # BDL arba "--"
         bdl_val = info.get("bdl", "")
         parts.append(bdl_val if bdl_val else "--")
+
+        # LDL arba "--"
         ldl_val = info.get("ldl", "")
         parts.append(ldl_val if ldl_val else "--")
+
         return " ".join(parts)
 
     df_last["cell_val"] = df_last.apply(
@@ -205,9 +207,9 @@ def show(conn, c):
     )
 
     # ==============================
-    # 11) Sukuriame pivot lentelę:
+    # 10) Sukuriame pivot lentelę:
     #       – index   = vilkikas
-    #       – columns = data (iškrovimo data)
+    #       – columns = data (iškrovimo data, pvz. '2025-06-05', ..., '2025-06-17')
     #       – values  = cell_val
     # ==============================
     pivot_df = df_last.pivot(
@@ -217,17 +219,18 @@ def show(conn, c):
     )
 
     # ==============================
-    # 12) Užtikriname, kad stulpeliai atitiktų visas datas intervale
+    # 11) Užtikriname, kad stulpeliai atitiktų visas „date_strs“ datas
     # ==============================
     pivot_df = pivot_df.reindex(columns=date_strs, fill_value="")
 
     # ==============================
-    # 13) Filtruojame eilutes: rodome tik tuos vilkikus, kurie turi df_last įrašą
+    # 12) Rodyti tik vilkikus, turinčius „df_last“ įrašą (t.y. tie, kurie iškrauna per du savaites)
     # ==============================
     pivot_df = pivot_df.reindex(index=df_last["vilkikas"].unique(), fill_value="")
 
     # ==============================
-    # 14) Paimame SA (paskutinę) iš vilkiku_darbo_laikai kiekvienam vilkikui
+    # 13) Paimame SA (paskutinę reikšmę) iš vilkiku_darbo_laikai kiekvienam vilkikui:
+    #     – filtruojame pagal `data = pak_data`
     # ==============================
     sa_map = {}
     for v in pivot_df.index:
@@ -244,17 +247,19 @@ def show(conn, c):
         sa_map[v] = row[0] if row and row[0] is not None else ""
 
     # ==============================
-    # 15) Sukuriame indekso pavadinimą:
-    #       – vilkikas
-    #       – jei yra priekaba: "/priekaba"
-    #       – jei yra vadybininkas: " vadybininkas"
-    #       – jei yra SA: " SA"
+    # 14) Sukuriame indekso (eilutės) pavadinimą:
+    #       “Vilkikas/Priekaba Vadybininkas SA”
+    #     – be tarpų aplink “/”
+    #     – jei priekaba yra, pridedame “/<priekaba>”
+    #     – jei vadybininkas yra, pridedame “ <vadybininkas>”
+    #     – jei SA yra, pridedame “ <SA>”
     # ==============================
     combined_index = []
     for v in pivot_df.index:
         priek = priekaba_map.get(v, "")
-        vad = vadybininkas_map.get(v, "")
-        sa = sa_map.get(v, "")
+        vad  = vadybininkas_map.get(v, "")
+        sa   = sa_map.get(v, "")
+
         label = v
         if priek:
             label += f"/{priek}"
@@ -262,26 +267,31 @@ def show(conn, c):
             label += f" {vad}"
         if sa:
             label += f" {sa}"
+
         combined_index.append(label)
 
     pivot_df.index = combined_index
     pivot_df.index.name = "Vilkikas/Priekaba Vadybininkas SA"
 
     # ==============================
-    # 16) Atvaizduojame HTML lentelę su horizontaliu skrolu
+    # 15) Generuojame HTML lentelę su horizontaliu skrolu
     # ==============================
     html = "<div class='scroll-container'><table>\n"
+    # 15.1) Antraštės eilutė
     html += "  <thead>\n    <tr>\n"
-    html += "      <th title='Vilkikas/Priekaba Vadybininkas SA'>Vilkikas/Priekaba Vadybininkas SA</th>\n"
+    html += "      <th>Vilkikas/Priekaba Vadybininkas SA</th>\n"
     for d in date_strs:
         html += f"      <th>{d}</th>\n"
     html += "    </tr>\n  </thead>\n"
+
+    # 15.2) Turinio eilutės
     html += "  <tbody>\n"
     for idx in pivot_df.index:
         html += "    <tr>\n"
         html += f"      <td>{idx}</td>\n"
         for d in date_strs:
             val = pivot_df.at[idx, d]
+            # jei val = NaN arba blank, paliekame tuščią
             if pd.isna(val) or str(val).strip() == "":
                 cell_html = ""
             else:
