@@ -1,5 +1,3 @@
-# modules/darbuotojai.py
-
 import streamlit as st
 import pandas as pd
 
@@ -24,44 +22,43 @@ def show(conn, c):
     # Antraštė + „Pridėti naują darbuotoją“ mygtukas
     title_col, add_col = st.columns([9, 1])
     title_col.title("DISPO – Darbuotojai")
-    add_col.button("➕ Pridėti naują darbuotoją", on_click=start_new)
+    add_col.button("➕ Pridėti naują darbuotoją", on_click=start_new, use_container_width=True)
 
     # Inicializuojame būseną
     if 'selected_emp' not in st.session_state:
         st.session_state.selected_emp = None
 
-    # 1. SĄRAŠO rodinys su filtravimu
+    # 1. SĄRAŠO rodinys su filtravimu (be headerių virš ir po filtrų)
     if st.session_state.selected_emp is None:
         df = pd.read_sql(
             "SELECT id, vardas, pavarde, pareigybe, el_pastas, telefonas, grupe, aktyvus FROM darbuotojai",
             conn
         )
 
-        # Filtrai virš stulpelių (be ikonų ir be matomo teksto)
+        if df.empty:
+            st.info("ℹ️ Nėra darbuotojų.")
+            return
+
+        # Paruošiame rodymui: None → ""
+        df = df.fillna('')
+
+        # 1.1) Filtravimo laukai su placeholder’iais (tik patys filtrai, be antraščių)
         filter_cols = st.columns(len(df.columns) + 1)
         for i, col in enumerate(df.columns):
-            filter_cols[i].text_input(
-                "", key=f"f_emp_{col}", label_visibility="collapsed"
-            )
+            filter_cols[i].text_input(label="", placeholder=col, key=f"f_emp_{col}")
         filter_cols[-1].write("")
 
-        # Taikome filtrus
+        # 1.2) Taikome filtrus
+        df_filt = df.copy()
         for col in df.columns:
             val = st.session_state.get(f"f_emp_{col}", "")
             if val:
-                df = df[df[col].astype(str).str.contains(val, case=False, na=False)]
+                df_filt = df_filt[df_filt[col].astype(str).str.contains(val, case=False, na=False)]
 
-        # Headeriai (kolonų pavadinimai)
-        hdr = st.columns(len(df.columns) + 1)
-        for i, col in enumerate(df.columns):
-            hdr[i].markdown(f"**{col}**")
-        hdr[-1].markdown("**Veiksmai**")
-
-        # Eilučių atvaizdavimas su redagavimo mygtuku
-        for _, row in df.iterrows():
-            row_cols = st.columns(len(df.columns) + 1)
-            for i, col in enumerate(df.columns):
-                # Rodo „Taip“ arba „Ne“ vietoje 1/0 stulpelyje „aktyvus“
+        # 1.3) Eilučių atvaizdavimas su redagavimo mygtuku (be headerių po filtrų)
+        for _, row in df_filt.iterrows():
+            row_cols = st.columns(len(df_filt.columns) + 1)
+            for i, col in enumerate(df_filt.columns):
                 if col == "aktyvus":
                     row_cols[i].write("Taip" if row[col] == 1 else "Ne")
                 else:
@@ -156,7 +153,7 @@ def show(conn, c):
         default_status = True
     else:
         default_status = (emp_data.get("aktyvus", 1) == 1)
-    aktyvus_checkbox = st.checkbox(
+    aktivus_checkbox = st.checkbox(
         "Aktyvus darbuotojas", key="aktyvus", value=default_status
     )
 
