@@ -1,10 +1,7 @@
-# modules/kroviniai.py
-
 import streamlit as st
 import pandas as pd
 from datetime import date, time, timedelta
 
-# Sąrašas šalių dropdown’ui
 EU_COUNTRIES = [
     ("", ""), ("Lietuva", "LT"), ("Baltarusija", "BY"), ("Latvija", "LV"), ("Lenkija", "PL"), ("Vokietija", "DE"),
     ("Prancūzija", "FR"), ("Ispanija", "ES"), ("Italija", "IT"), ("Olandija", "NL"), ("Belgija", "BE"),
@@ -14,7 +11,6 @@ EU_COUNTRIES = [
     ("Airija", "IE"), ("Didžioji Britanija", "GB"),
 ]
 
-# Antraštės stulpeliams lentelėje
 HEADER_LABELS = {
     "id": "ID",
     "busena": "Būsena",
@@ -34,7 +30,6 @@ HEADER_LABELS = {
     "saskaitos_busena": "Sąskaitos būsena"
 }
 
-# Rikiavimo tvarka lentelėje
 FIELD_ORDER = [
     "id", "busena", "pakrovimo_data", "iskrovimo_data",
     "pakrovimo_vieta", "iskrovimo_vieta",
@@ -44,7 +39,6 @@ FIELD_ORDER = [
     "saskaitos_busena"
 ]
 
-# Funkcija, grąžinanti krovinio būseną pagal vilkiku_darbo_laikai
 def get_busena(c, krovinys):
     if not krovinys.get("vilkikas"):
         return "Nesuplanuotas"
@@ -74,7 +68,6 @@ def get_busena(c, krovinys):
         return "Kita (pakrovimas)"
     return busena
 
-# Sukonstruoja vietos tekstą iš šalies ir regiono
 def get_vieta(salis, regionas):
     if not salis:
         return ""
@@ -84,7 +77,7 @@ def show(conn, c):
     st.title("Užsakymų valdymas")
     add_clicked = st.button("➕ Pridėti naują krovinį", use_container_width=True)
 
-    # 1. Užtikriname, kad lentelėje „kroviniai“ būtų visi reikalingi stulpeliai
+    # Ensure all required columns exist in 'kroviniai'
     expected = {
         'klientas': 'TEXT',
         'uzsakymo_numeris': 'TEXT',
@@ -121,7 +114,7 @@ def show(conn, c):
             c.execute(f"ALTER TABLE kroviniai ADD COLUMN {col} {typ}")
     conn.commit()
 
-    # 2. Paruošiame dropdown’us ir map’us
+    # Prepare dropdowns and maps
     klientai = [r[0] for r in c.execute("SELECT pavadinimas FROM klientai").fetchall()]
     if len(klientai) == 0:
         st.warning("Nėra nė vieno kliento! Pridėkite klientą modulyje **Klientai** ir grįžkite čia.")
@@ -136,10 +129,10 @@ def show(conn, c):
     vilkikai_df = pd.read_sql_query("SELECT numeris, vadybininkas FROM vilkikai", conn)
     vilk_vad_map = {r['numeris']: r['vadybininkas'] for _, r in vilkikai_df.iterrows()}
 
+    # Build a map: klientas name → likes_limitas (current stored)
     df_klientai = pd.read_sql_query("SELECT pavadinimas, likes_limitas FROM klientai", conn)
     klientu_limitai = {row['pavadinimas']: row['likes_limitas'] for _, row in df_klientai.iterrows()}
 
-    # 3. Session state inicijavimas
     if 'selected_cargo' not in st.session_state:
         st.session_state['selected_cargo'] = None
     if add_clicked:
@@ -156,13 +149,13 @@ def show(conn, c):
 
     sel = st.session_state['selected_cargo']
 
-    # 4. Esamų krovinių sąrašas
+    # 4. List of existing kroviniai
     if sel is None:
         df = pd.read_sql_query("SELECT * FROM kroviniai", conn)
         if df.empty:
             st.info("Kol kas nėra krovinių.")
         else:
-            # Sukuriame kombinuotus stulpelius
+            # Construct combined columns
             df["pakrovimo_vieta"] = df.apply(lambda r: get_vieta(r.get('pakrovimo_salis', ''), r.get('pakrovimo_regionas', '')), axis=1)
             df["iskrovimo_vieta"] = df.apply(lambda r: get_vieta(r.get('iskrovimo_salis', ''), r.get('iskrovimo_regionas', '')), axis=1)
             df["transporto_vadybininkas"] = df["vilkikas"].map(vilk_vad_map).fillna("")
@@ -174,7 +167,7 @@ def show(conn, c):
 
             df_disp = df[FIELD_ORDER].fillna("")
 
-            # Filtrai
+            # Filters
             filter_cols = st.columns(len(df_disp.columns) + 1)
             for i, col in enumerate(df_disp.columns):
                 filter_cols[i].text_input(
@@ -215,7 +208,7 @@ def show(conn, c):
             )
         return
 
-    # 5. Formos atvaizdavimas (naujas arba redaguoti)
+    # 5. Form for new/edit cargo
     is_new = (sel == 0)
     data = {} if is_new else pd.read_sql_query("SELECT * FROM kroviniai WHERE id=?", conn, params=(sel,)).iloc[0]
     if not is_new and data.empty:
@@ -226,7 +219,7 @@ def show(conn, c):
     st.markdown("### Krovinių įvedimas")
     colA, colB, colC, colD = st.columns(4)
     with st.form("cargo_form", clear_on_submit=False):
-        # --- Kolona A: klientas, užsakymo nr., sąskaitos būsena, ekspedicijos vadybininkas ---
+        # --- Column A: basic metadata ---
         opts_k = [""] + klientai
         idx_k = 0 if is_new else opts_k.index(data.get('klientas', ''))
         klientas = colA.selectbox("Klientas", opts_k, index=idx_k, key="kl_klientas")
@@ -246,7 +239,7 @@ def show(conn, c):
         eksped_idx = eksped_dropdown.index(eksped_val) if eksped_val in eksped_dropdown else 0
         eksped_vad = colA.selectbox("Ekspedicijos vadybininkas", eksped_dropdown, index=eksped_idx, key="eksped_vad")
 
-        # --- Kolona B: pakrovimo datos ir laikai ---
+        # --- Column B: pakrovimo datos ir laikas ---
         pk_data = colB.date_input(
             "Pakrovimo data",
             value=(date.today() if is_new else pd.to_datetime(data['pakrovimo_data']).date()),
@@ -286,7 +279,7 @@ def show(conn, c):
             key="pk_iki"
         )
 
-        # --- Kolona C: iškrovimo datos ir laikai ---
+        # --- Column C: iskrovimo datos ir laikas ---
         isk_data = colC.date_input(
             "Iškrovimo data",
             value=((pk_data + timedelta(days=1)) if is_new else pd.to_datetime(data['iskrovimo_data']).date()),
@@ -326,7 +319,7 @@ def show(conn, c):
             key="is_iki"
         )
 
-        # --- Kolona D: transporto priemonės ir finansai ---
+        # --- Column D: transporto priemonės ir finansai ---
         v_opts = [""] + vilkikai
         v_idx = 0 if is_new else v_opts.index(data.get('vilkikas', ''))
         vilk = colD.selectbox("Vilkikas", v_opts, index=v_idx, key="cr_vilk")
@@ -360,9 +353,8 @@ def show(conn, c):
         save = st.form_submit_button("💾 Išsaugoti")
         back = st.form_submit_button("🔙 Grįžti į sąrašą", on_click=clear_sel)
 
-    # 6. Saugojimo / grįžimo logika su papildomu persidengimo patikrinimu
+    # 6. Save / Back logic
     if save:
-        # 6.1 Validacijos – tikrina frachtą, km, svorį, padėklius
         try:
             frachtas_float = float(fr.replace(",", ".") or 0)
         except:
@@ -376,7 +368,7 @@ def show(conn, c):
             st.error("❌ Netinkamas skaičius (Km / Svoris / Padėklai).")
             return
 
-        # 6.2 Patikrina datos logiką
+        # Check dates
         if pk_data > isk_data:
             st.error("Pakrovimo data negali būti vėlesnė už iškrovimo.")
             return
@@ -384,7 +376,7 @@ def show(conn, c):
             st.error("Privalomi laukai: Klientas ir Užsakymo nr.")
             return
         else:
-            # 6.3 Patikriname, ar klientas turi VAT
+            # Retrieve VAT and COFACE of selected klientas
             vat_row = c.execute(
                 "SELECT vat_numeris, coface_limitas FROM klientai WHERE pavadinimas = ?",
                 (klientas,)
@@ -394,9 +386,10 @@ def show(conn, c):
                 return
             vat_of_client, coface_of_client = vat_row
 
-            # 6.4 Apskaičiuojame kliento limitą
+            # Compute musu_limit and current unpaid sum for this VAT
             musu_limitas = coface_of_client / 3.0
             unpaid_sum = 0.0
+            # Sum unpaid frachtai across all entries for this VAT
             try:
                 r = c.execute("""
                     SELECT SUM(k.frachtas)
@@ -418,40 +411,6 @@ def show(conn, c):
                 st.error(f"Kliento limito likutis ({round(current_limit,2)}) yra mažesnis nei frachtas ({frachtas_float}). Negalima išsaugoti.")
                 return
 
-            # 6.5 PERSIDENGIMO PATIKRINIMAS: ar vilkikas turi jau esamą krovinį, kuris persidengia datomis?
-            # SQL sąlyga: nėra esamo krovinio, kurio intervalas persidengtų su naujo įrašo intervalo. 
-            # Jeigu redaguojame įrašą, išimame save patį iš patikrinimo (id != sel).
-            new_pk = pk_data.isoformat()       # pvz. "2025-06-05"
-            new_ik = isk_data.isoformat()      # pvz. "2025-06-06"
-            if vilk:
-                if is_new:
-                    conflict_query = """
-                        SELECT COUNT(*) FROM kroviniai
-                        WHERE vilkikas = ?
-                          AND NOT (
-                            iskrovimo_data < ?
-                            OR pakrovimo_data > ?
-                          )
-                    """
-                    params_conf = (vilk, new_pk, new_ik)
-                else:
-                    conflict_query = """
-                        SELECT COUNT(*) FROM kroviniai
-                        WHERE vilkikas = ?
-                          AND id != ?
-                          AND NOT (
-                            iskrovimo_data < ?
-                            OR pakrovimo_data > ?
-                          )
-                    """
-                    params_conf = (vilk, sel, new_pk, new_ik)
-
-                cnt = c.execute(conflict_query, params_conf).fetchone()[0]
-                if cnt and cnt > 0:
-                    st.error("❌ Šis vilkikas to metu jau turi kitą krovinį persidengiančiu laiku. Pasirinkite kitą datą arba vilkiką.")
-                    return
-
-            # 6.6 Jeigu viskas OK – surenkame žodyną įrašo vertei
             vals = {
                 'klientas': klientas,
                 'uzsakymo_numeris': uzsak,
@@ -488,11 +447,11 @@ def show(conn, c):
                     c.execute(q, tuple(vals.values()))
                 else:
                     set_str = ",".join(f"{k}=?" for k in vals)
-                    q = f"UPDATE kroviniai SET {set_str} WHERE id = ?"
+                    q = f"UPDATE kroviniai SET {set_str} WHERE id=?"
                     c.execute(q, tuple(vals.values()) + (sel,))
                 conn.commit()
 
-                # 6.7 Atlikus įrašą – atnaujiname klientų limitus
+                # After saving cargo, recalc and update limits for all clients with same VAT
                 unpaid_total = 0.0
                 try:
                     r2 = c.execute("""
@@ -522,4 +481,4 @@ def show(conn, c):
                 st.success("✅ Krovinys išsaugotas ir limitai atnaujinti.")
                 clear_sel()
             except Exception as e:
-                st.error(f"❌ Klaida: {e}") :contentReference[oaicite:0]{index=0}
+                st.error(f"❌ Klaida: {e}")
