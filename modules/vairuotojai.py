@@ -14,7 +14,7 @@ TAUTYBES = [
 ]
 
 def show(conn, c):
-    # 1) Užtikriname, kad lentelėje 'vairuotojai' egzistuotų visi reikalingi stulpeliai
+    # 1) Užtikrinkime, kad lentelėje 'vairuotojai' egzistuotų visi reikalingi stulpeliai
     existing = [r[1] for r in c.execute("PRAGMA table_info(vairuotojai)").fetchall()]
     extras = {
         "vardas": "TEXT",
@@ -270,49 +270,38 @@ def show(conn, c):
         inplace=True,
     )
 
-    # 6.3) Override rodinius pagal priskyrimą:
-    #      - Jei vairuotojas priskirtas (jo vardas yra driver_to_vilk),
-    #        tuomet:
-    #          * jeigu Kadencijos pabaigos laukas tuščias → rodyti "trūksta datos"
-    #          * jei nurodyta, rodyti datą
-    #          * Atostogų pabaiga privalo būti tuščia
-    #      - Jei nepriskirtas:
-    #          * jeigu Atostogų pabaigos laukas tuščias → rodyti "trūksta datos"
-    #          * jei nurodyta, rodyti datą
-    #          * Kadencijos pabaiga privalo būti tuščia
+    # 6.3) Atnaujiname „Kadencijos pabaiga“ ir „Atostogų pabaiga“ rodinius pagal priskyrimą
     kad_vals = []
     atost_vals = []
     for _, row in df.iterrows():
         name = f"{row['vardas']} {row['pavarde']}"
         assigned_vilk = driver_to_vilk.get(name)
         if assigned_vilk:
-            # Priskirtas
+            # Priskirtas → rodyti kadencijos pabaigą arba „trūksta datos“
             kad_date = row.get("kadencijos_pabaiga", "")
-            # jei laukas tuščias, rodyti "trūksta datos"
             kad_vals.append(kad_date if kad_date else "trūksta datos")
-            # Atostogų pabaiga neturi rodyti, visada tuščia
-            atost_vals.append("")
+            atost_vals.append("")  # atostogų pabaiga visada tuščia, kai priskirtas
         else:
-            # Nepriskirtas
+            # Nepriskirtas → rodyti atostogų pabaigą arba „trūksta datos“
             atost_date = row.get("atostogu_pabaiga", "")
             atost_vals.append(atost_date if atost_date else "trūksta datos")
-            kad_vals.append("")
+            kad_vals.append("")  # kadencijos pabaiga visada tuščia, kai nepriskirtas
 
     df_disp["Kadencijos pabaiga"] = kad_vals
     df_disp["Atostogų pabaiga"] = atost_vals
 
-    # 6.4) Pridedame stulpelį "Priskirtas vilkikas"
+    # 6.4) Pridedame stulpelį „Priskirtas vilkikas“
     assigned = []
     for _, row in df.iterrows():
         name = f"{row['vardas']} {row['pavarde']}"
         assigned.append(driver_to_vilk.get(name, ""))
     df_disp["Priskirtas vilkikas"] = assigned
 
-    # 6.5) Filtravimo laukai (vieninteliai, po jų – lentelės header)
+    # 6.5) FILTRAVIMO LAUKAI be papildomų antraščių virš jų
     filter_cols = st.columns(len(df_disp.columns) + 1)
     for i, col in enumerate(df_disp.columns):
-        filter_cols[i].text_input(col, key=f"f_{col}")
-    filter_cols[-1].write("")  # paskutinis stulpelis skirtas vietai, be įvesties
+        filter_cols[i].text_input(label="", placeholder=col, key=f"f_{col}")
+    filter_cols[-1].write("")  # papildomas tuščias stulpelis filtrui
 
     df_filt = df_disp.copy()
     for col in df_disp.columns:
