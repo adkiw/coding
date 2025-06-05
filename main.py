@@ -1,286 +1,121 @@
-# modules/klientai.py
+# main.py
 
 import streamlit as st
-import pandas as pd
+import sqlite3
 
-def show(conn, c):
-    # 1. Ensure required columns exist
-    expected = {
-        'vat_numeris':          'TEXT',
-        'kontaktinis_asmuo':    'TEXT',
-        'kontaktinis_el_pastas':'TEXT',
-        'kontaktinis_tel':      'TEXT',
-        'salis':                'TEXT',
-        'regionas':             'TEXT',
-        'miestas':              'TEXT',
-        'adresas':              'TEXT',
-        'saskaitos_asmuo':      'TEXT',
-        'saskaitos_el_pastas':  'TEXT',
-        'saskaitos_tel':        'TEXT',
-        'coface_limitas':       'REAL',
-        'musu_limitas':         'REAL',
-        'likes_limitas':        'REAL',
-    }
-    c.execute("PRAGMA table_info(klientai)")
-    existing = {r[1] for r in c.fetchall()}
-    for col, typ in expected.items():
-        if col not in existing:
-            c.execute(f"ALTER TABLE klientai ADD COLUMN {col} {typ}")
-    conn.commit()
+# 0) “Hot‐zone” CSS + nematomas swipe‐down sidebar iš viršaus
+st.markdown("""
+    <style>
+      /* Paslepiame standartinį sidebar už ekrano ribų */
+      [data-testid="stSidebar"] {
+        position: fixed;
+        top: -100%;
+        left: 0;
+        width: 250px;
+        height: 100vh;
+        background-color: var(--primary-background-color);
+        transition: top 0.3s ease-in-out;
+        z-index: 1000;
+      }
+      /* Nematomas “hot zone” lango viršuje (20px aukščio) */
+      .hover-zone {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 20px;
+        z-index: 999;
+      }
+      /* Kai hover virš .hover-zone – sidebar nusileidžia */
+      .hover-zone:hover + [data-testid="stSidebar"] {
+        top: 0;
+      }
+      /* Jei pelė virš nusileidusio sidebar – laikome atvertą */
+      [data-testid="stSidebar"]:hover {
+        top: 0;
+      }
+      /* Trumpesnis fontas, kad tilptų daugiau turinio vienoje eilutėje */
+      th, td, .stTextInput>div>div>input, .stDateInput>div>div>input {
+        font-size: 12px !important;
+      }
+      .tiny {
+        font-size: 10px;
+        color: #888;
+      }
+      .block-container {
+        padding-top: 0.5rem !important;
+      }
+      /* Paslėpti selectbox rodykles */
+      div[role="option"] svg,
+      div[role="combobox"] svg,
+      span[data-baseweb="select"] svg {
+        display: none !important;
+      }
+    </style>
+    <!-- Nematomos zonos div, kuris “pagavus” hover iš viršaus išvers sidebar -->
+    <div class="hover-zone"></div>
+""", unsafe_allow_html=True)
 
-    # Callbacks
-    def clear_selection():
-        st.session_state.selected_client = None
+# 1) Standartinis set_page_config (privalo būti pirmasis Streamlit komanda)
+st.set_page_config(layout="wide")
 
-    def start_new():
-        st.session_state.selected_client = 0
+# 2) Prisijungimas prie SQLite DB
+conn = sqlite3.connect("dispo_new.db", check_same_thread=False)
+c = conn.cursor()
 
-    def start_edit(cid):
-        st.session_state.selected_client = cid
+# 3) Importuojame visus modulius
+from modules import (
+    dispo,
+    kroviniai,
+    vilkikai,
+    priekabos,
+    grupes,
+    vairuotojai,
+    klientai,
+    darbuotojai,
+    nustatymai,
+    update,
+    planavimas
+)
 
-    # 2. Title + Add button
-    title_col, add_col = st.columns([9, 1])
-    title_col.title("DISPO – Klientai")
-    add_col.button("➕ Pridėti naują klientą", on_click=start_new)
+# 4) Sidebar meniu (nuo viršaus, bet paslėptas tol, kol nepasirodo)
+with st.sidebar:
+    st.header("📂 Pasirink modulį")
+    moduliai = [
+        "Dispo",
+        "Kroviniai",
+        "Vilkikai",
+        "Priekabos",
+        "Grupės",
+        "Vairuotojai",
+        "Klientai",
+        "Darbuotojai",
+        "Nustatymai",
+        "Planavimas",
+        "Update"
+    ]
+    pasirinktas = st.radio("", moduliai)
 
-    # 3. Init state
-    if 'selected_client' not in st.session_state:
-        st.session_state.selected_client = None
-
-    # 4. List view
-    if st.session_state.selected_client is None:
-        df = pd.read_sql(
-            "SELECT id, pavadinimas, salis, regionas, miestas, likes_limitas AS limito_likutis FROM klientai",
-            conn
-        )
-        filter_cols = st.columns(len(df.columns) + 1)
-        for i, col in enumerate(df.columns):
-            filter_cols[i].text_input(f"🔍 {col}", key=f"f_{col}")
-        filter_cols[-1].write("")
-        for col in df.columns:
-            val = st.session_state.get(f"f_{col}", "")
-            if val:
-                df = df[df[col].astype(str).str.contains(val, case=False, na=False)]
-        hdr = st.columns(len(df.columns) + 1)
-        for i, col in enumerate(df.columns):
-            hdr[i].markdown(f"**{col}**")
-        hdr[-1].markdown("**Veiksmai**")
-        for _, row in df.iterrows():
-            row_cols = st.columns(len(df.columns) + 1)
-            for i, col in enumerate(df.columns):
-                row_cols[i].write(row[col])
-            row_cols[-1].button(
-                "✏️", key=f"edit_{row['id']}", on_click=start_edit, args=(row['id'],)
-            )
-            st.markdown("<div style='height:1cm'></div>", unsafe_allow_html=True)
-        return
-
-    # 5. Detail / new form
-    sel = st.session_state.selected_client
-    is_new = (sel == 0)
-    cli = {}
-    if not is_new:
-        df_cli = pd.read_sql("SELECT * FROM klientai WHERE id=?", conn, params=(sel,))
-        if df_cli.empty:
-            st.error("Klientas nerastas.")
-            clear_selection()
-            return
-        cli = df_cli.iloc[0]
-
-    st.markdown("### Kliento duomenys")
-    existing_vats = {
-        row['vat_numeris']: row['coface_limitas']
-        for _, row in pd.read_sql("SELECT vat_numeris, coface_limitas FROM klientai", conn).iterrows()
-        if row['vat_numeris']
-    }
-
-    col1, col2 = st.columns(2)
-    with st.form("client_form", clear_on_submit=False):
-        pavadinimas = col1.text_input(
-            "Įmonės pavadinimas",
-            value=("" if is_new else cli.get("pavadinimas", "")),
-            key="pavadinimas"
-        )
-        vat_default = "" if is_new else cli.get("vat_numeris", "")
-        vat_numeris = col1.text_input(
-            "PVM/VAT numeris *",
-            value=vat_default,
-            key="vat_numeris"
-        )
-        kontaktinis_asmuo = col1.text_input(
-            "Kontaktinis asmuo",
-            value=("" if is_new else cli.get("kontaktinis_asmuo", "")),
-            key="kontaktinis_asmuo"
-        )
-        kontaktinis_el_pastas = col1.text_input(
-            "Kontaktinis el. paštas",
-            value=("" if is_new else cli.get("kontaktinis_el_pastas", "")),
-            key="kontaktinis_el_pastas"
-        )
-        kontaktinis_tel = col1.text_input(
-            "Kontaktinis tel. nr",
-            value=("" if is_new else cli.get("kontaktinis_tel", "")),
-            key="kontaktinis_tel"
-        )
-        salis = col1.text_input(
-            "Šalis",
-            value=("" if is_new else cli.get("salis", "")),
-            key="salis"
-        )
-        regionas = col1.text_input(
-            "Regionas",
-            value=("" if is_new else cli.get("regionas", "")),
-            key="regionas"
-        )
-        miestas = col1.text_input(
-            "Miestas",
-            value=("" if is_new else cli.get("miestas", "")),
-            key="miestas"
-        )
-        adresas = col1.text_input(
-            "Adresas",
-            value=("" if is_new else cli.get("adresas", "")),
-            key="adresas"
-        )
-
-        saskaitos_asmuo = col2.text_input(
-            "Sąskaitų kontaktinis asmuo",
-            value=("" if is_new else cli.get("saskaitos_asmuo", "")),
-            key="saskaitos_asmuo"
-        )
-        saskaitos_el_pastas = col2.text_input(
-            "Sąskaitų el. paštas",
-            value=("" if is_new else cli.get("saskaitos_el_pastas", "")),
-            key="saskaitos_el_pastas"
-        )
-        saskaitos_tel = col2.text_input(
-            "Sąskaitų tel. nr",
-            value=("" if is_new else cli.get("saskaitos_tel", "")),
-            key="saskaitos_tel"
-        )
-
-        coface_prefill = ""
-        if is_new and vat_default == "" and st.session_state.get("vat_numeris", "") in existing_vats:
-            coface_prefill = str(existing_vats[st.session_state["vat_numeris"]])
-        elif not is_new:
-            coface_prefill = str(cli.get("coface_limitas", ""))
-
-        coface_limitas = col2.text_input(
-            "COFACE limitas",
-            value=coface_prefill,
-            key="coface_limitas"
-        )
-
-        def compute_limits(vat, coface):
-            try:
-                coface_val = float(coface)
-            except:
-                return "", ""
-            musu = coface_val / 3.0
-            c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='kroviniai'")
-            if not c.fetchone():
-                unpaid_sum = 0.0
-            else:
-                try:
-                    r = c.execute("""
-                        SELECT SUM(k.frachtas) 
-                        FROM kroviniai AS k
-                        JOIN klientai AS cl ON k.klientas = cl.pavadinimas
-                        WHERE cl.vat_numeris = ? 
-                          AND k.saskaitos_busena != 'Apmokėta'
-                    """, (vat,)).fetchone()
-                    unpaid_sum = r[0] if r and r[0] is not None else 0.0
-                except:
-                    unpaid_sum = 0.0
-            liks = musu - unpaid_sum
-            return round(musu, 2), round(liks, 2)
-
-        musu_limitas_display = ""
-        liks_display = ""
-        if st.session_state.get("vat_numeris", "") and st.session_state.get("coface_limitas", ""):
-            m, l = compute_limits(st.session_state["vat_numeris"], st.session_state["coface_limitas"])
-            musu_limitas_display = str(m)
-            liks_display = str(l)
-
-        col2.markdown(f"**Mūsų limitas (COFACE/3):** {musu_limitas_display}")
-        col2.markdown(f"**Limito likutis:** {liks_display}")
-
-        save = st.form_submit_button("💾 Išsaugoti")
-        back = st.form_submit_button("🔙 Grįžti į sąrašą", on_click=clear_selection)
-
-    # 7. Save / Back logic
-    if save:
-        if not st.session_state["vat_numeris"].strip():
-            st.error("❌ PVM/VAT numeris yra privalomas.")
-            return
-
-        try:
-            coface_val = float(st.session_state["coface_limitas"])
-        except:
-            st.error("❌ Netinkamas COFACE limitas. Įveskite skaičių.")
-            return
-
-        musu_limitas_calc, liks_calc = compute_limits(
-            st.session_state["vat_numeris"], 
-            st.session_state["coface_limitas"]
-        )
-
-        vals = {
-            'pavadinimas':         st.session_state["pavadinimas"],
-            'vat_numeris':         st.session_state["vat_numeris"],
-            'kontaktinis_asmuo':   st.session_state["kontaktinis_asmuo"],
-            'kontaktinis_el_pastas':st.session_state["kontaktinis_el_pastas"],
-            'kontaktinis_tel':     st.session_state["kontaktinis_tel"],
-            'salis':               st.session_state["salis"],
-            'regionas':            st.session_state["regionas"],
-            'miestas':             st.session_state["miestas"],
-            'adresas':             st.session_state["adresas"],
-            'saskaitos_asmuo':     st.session_state["saskaitos_asmuo"],
-            'saskaitos_el_pastas': st.session_state["saskaitos_el_pastas"],
-            'saskaitos_tel':       st.session_state["saskaitos_tel"],
-            'coface_limitas':      coface_val,
-            'musu_limitas':        musu_limitas_calc,
-            'likes_limitas':       liks_calc
-        }
-
-        try:
-            if is_new:
-                cols_sql = ", ".join(vals.keys())
-                ph = ", ".join("?" for _ in vals)
-                c.execute(f"INSERT INTO klientai ({cols_sql}) VALUES ({ph})", tuple(vals.values()))
-            else:
-                vals_list = list(vals.values()) + [sel]
-                sc = ", ".join(f"{k}=?" for k in vals.keys())
-                c.execute(f"UPDATE klientai SET {sc} WHERE id=?", tuple(vals_list))
-            conn.commit()
-
-            vat = st.session_state["vat_numeris"]
-            c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='kroviniai'")
-            if not c.fetchone():
-                unpaid_total = 0.0
-            else:
-                try:
-                    r2 = c.execute("""
-                        SELECT SUM(k.frachtas)
-                        FROM kroviniai AS k
-                        JOIN klientai AS cl ON k.klientas = cl.pavadinimas
-                        WHERE cl.vat_numeris = ?
-                          AND k.saskaitos_busena != 'Apmokėta'
-                    """, (vat,)).fetchone()
-                    unpaid_total = r2[0] if r2 and r2[0] is not None else 0.0
-                except:
-                    unpaid_total = 0.0
-            new_musu = coface_val / 3.0
-            new_liks = new_musu - unpaid_total
-
-            c.execute("""
-                UPDATE klientai
-                SET coface_limitas = ?, musu_limitas = ?, likes_limitas = ?
-                WHERE vat_numeris = ?
-            """, (coface_val, new_musu, new_liks, vat))
-            conn.commit()
-
-            st.success("✅ Duomenys įrašyti ir limitai atnaujinti visiems su tuo pačiu VAT numeriu.")
-            clear_selection()
-        except Exception as e:
-            st.error(f"❌ Klaida: {e}")
+# 5) Pagal pasirinktą modulį kviečiame atitinkamą show(...)
+if pasirinktas == "Dispo":
+    dispo.show(conn, c)
+elif pasirinktas == "Kroviniai":
+    kroviniai.show(conn, c)
+elif pasirinktas == "Vilkikai":
+    vilkikai.show(conn, c)
+elif pasirinktas == "Priekabos":
+    priekabos.show(conn, c)
+elif pasirinktas == "Grupės":
+    grupes.show(conn, c)
+elif pasirinktas == "Vairuotojai":
+    vairuotojai.show(conn, c)
+elif pasirinktas == "Klientai":
+    klientai.show(conn, c)
+elif pasirinktas == "Darbuotojai":
+    darbuotojai.show(conn, c)
+elif pasirinktas == "Nustatymai":
+    nustatymai.show(conn, c)
+elif pasirinktas == "Planavimas":
+    planavimas.show(conn, c)
+elif pasirinktas == "Update":
+    update.show(conn, c)
