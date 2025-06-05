@@ -330,4 +330,4 @@ def show(conn, c):
                     st.info(f"🛡️ Dienų iki draudimo pabaigos liko: {(draud_date - date.today()).days}")
             except Exception as e:
                 st.error(f"❌ Klaida saugant: {e}")
-    # 9) End of show() 
+    # 9) End of show()
