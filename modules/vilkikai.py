@@ -116,6 +116,7 @@ def show(conn, c):
 
             conn.commit()
             st.success("✅ Priekabos paskirstymas sėkmingai atnaujintas.")
+            clear_selection()  # Immediately exit to the list view
 
         # 6.2) Show full-width "Add new truck" button
         st.button("➕ Pridėti naują vilkiką", on_click=new_vilk, use_container_width=True)
@@ -146,7 +147,7 @@ def show(conn, c):
         df_disp.drop(columns=['vairuotojai'], inplace=True)
 
         # Calculate days left to tech inspection and insurance
-        df_disp['Liko iki tech apžiūros'] = df_disp['tech_apziura'].apply(
+        df_disp['Liko iki tech apžiūros'] = df_disp['tech_apziūra'].apply(
             lambda x: (date.fromisoformat(x) - date.today()).days if x else ''
         )
         df_disp['Liko iki draudimo'] = df_disp['draudimas'].apply(
@@ -233,7 +234,7 @@ def show(conn, c):
         pr_initial = date.fromisoformat(vilk['pagaminimo_metai']) if (not is_new and vilk.get('pagaminimo_metai')) else None
         pr_data = col1.date_input("Pirmos registracijos data", value=pr_initial, key="pr_data")
 
-        tech_initial = date.fromisoformat(vilk['tech_apziura']) if (not is_new and vilk.get('tech_apziura')) else None
+        tech_initial = date.fromisoformat(vilk['tech_apziūra']) if (not is_new and vilk.get('tech_apziūra')) else None
         tech_date = col1.date_input("Tech. apžiūros pabaiga", value=tech_initial, key="tech_date")
 
         draud_initial = date.fromisoformat(vilk['draudimas']) if (not is_new and vilk.get('draudimas')) else None
@@ -290,13 +291,15 @@ def show(conn, c):
         pr_opts = [""]
         for num in priekabu_list:
             if num in assigned_trailers:
-                # If assigned to a different truck, mark red and disable selection
-                pr_opts.append(f"🔴 {num} ({c.execute('SELECT numeris FROM vilkikai WHERE priekaba = ?', (num,)).fetchone()[0]})")
+                # If assigned to a different truck, mark red and show that truck
+                assigned_truck = c.execute("SELECT numeris FROM vilkikai WHERE priekaba = ?", (num,)).fetchone()[0]
+                pr_opts.append(f"🔴 {num} ({assigned_truck})")
             else:
                 pr_opts.append(f"🟢 {num} (laisva)")
         pr_idx = 0
         if (not is_new) and vilk.get('priekaba'):
             for idx, opt in enumerate(pr_opts):
+                # match exactly the trailer string
                 if opt.endswith(vilk['priekaba']):
                     pr_idx = idx
                     break
@@ -310,7 +313,7 @@ def show(conn, c):
     if submit:
         def extract_name(selection):
             if selection and (selection.startswith("🟢") or selection.startswith("🔴")):
-                # strip prefix and any trailing "(...)" if present
+                # strip prefix and trailing parentheses if present
                 name = selection.split(" ", 1)[1]
                 return name.split(" ")[0] if "(" in name and ")" in name else name
             return ""
@@ -364,7 +367,7 @@ def show(conn, c):
                 if is_new:
                     c.execute(
                         """INSERT INTO vilkikai 
-                           (numeris, marke, pagaminimo_metai, tech_apziura, draudimas, 
+                           (numeris, marke, pagaminimo_metai, tech_apziūra, draudimas, 
                             vadybininkas, vairuotojai, priekaba)
                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                         (
@@ -381,7 +384,7 @@ def show(conn, c):
                 else:
                     c.execute(
                         """UPDATE vilkikai 
-                           SET marke=?, pagaminimo_metai=?, tech_apziura=?, draudimas=?, 
+                           SET marke=?, pagaminimo_metai=?, tech_apziūra=?, draudimas=?, 
                                vadybininkas=?, vairuotojai=?, priekaba=?
                            WHERE numeris=?""",
                         (
@@ -401,7 +404,7 @@ def show(conn, c):
                     st.info(f"🔧 Dienų iki tech. apžiūros liko: {(tech_date - date.today()).days}")
                 if draud_date:
                     st.info(f"🛡️ Dienų iki draudimo pabaigos liko: {(draud_date - date.today()).days}")
-                clear_selection()
+                clear_selection()  # Immediately return to list view after saving
             except Exception as e:
                 st.error(f"❌ Klaida saugant: {e}")
     # 9) End of show()
