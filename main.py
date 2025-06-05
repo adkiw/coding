@@ -3,14 +3,30 @@
 import streamlit as st
 import sqlite3
 
-# 1) Standartinis set_page_config (privalo būti pirmasis Streamlit komanda)
+# 1) Privalo būti pirmasis – nustatome platų išdėstymą
 st.set_page_config(layout="wide")
 
-# 2) Prisijungimas prie SQLite DB
+# 2) CSS stilius, kad viršuje esantis radio bar būtų apie 1 cm aukščio
+st.markdown("""
+    <style>
+      /* Tiesiogiai taikome CSS radio-grupei, kad visi pasirinkimai būtų viena eilute ir baras būtų ~ 1 cm */
+      .stRadio > div {
+        height: 1cm !important;
+        overflow: hidden; 
+      }
+      /* Kaip papildoma – sumažiname kiekvieno radion mygtuko vertikalinius padding’us */
+      .stRadio > div > label > div {
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+      }
+    </style>
+""", unsafe_allow_html=True)
+
+# 3) Prisijungimas prie SQLite DB
 conn = sqlite3.connect("dispo_new.db", check_same_thread=False)
 c = conn.cursor()
 
-# 3) Importuojame visus modulius
+# 4) Importuojame modulius
 from modules import (
     dispo,
     kroviniai,
@@ -25,33 +41,23 @@ from modules import (
     planavimas
 )
 
-# 4) Viršuje – sukuriame „expander“, kuriame yra modulio pasirinkimo radio.
-#    Iš pradžių jis suskleistas, paspaudus išsiskleidžia.
-with st.expander("☰ Modulių meniu", expanded=False):
-    moduliai = [
-        "Dispo",
-        "Kroviniai",
-        "Vilkikai",
-        "Priekabos",
-        "Grupės",
-        "Vairuotojai",
-        "Klientai",
-        "Darbuotojai",
-        "Nustatymai",
-        "Planavimas",
-        "Update"
-    ]
-    pasirinktas = st.radio("", moduliai, horizontal=True)
+# 5) Viršuje – horizontalus mygtukų baras (radio be jokių užrašų)
+moduliai = [
+    "Dispo",
+    "Kroviniai",
+    "Vilkikai",
+    "Priekabos",
+    "Grupės",
+    "Vairuotojai",
+    "Klientai",
+    "Darbuotojai",
+    "Nustatymai",
+    "Planavimas",
+    "Update"
+]
+pasirinktas = st.radio("", moduliai, horizontal=True)
 
-# Jeigu vartotojas dar nepaspaudė, "pasirinktas" kintamasis nebus apibrėžtas.
-# Todėl apsaugome:
-if 'pasirinktas' not in locals():
-    st.info("Pasirinkite modulį viršuje spustelėdami „☰ Modulių meniu“.")
-    st.stop()
-
-st.divider()
-
-# 5) Pagal pasirinktą modulį kviečiame atitinkamą show(...)
+# 6) Pagal pasirinktą modulį kviečiame atitinkamą funkciją
 if pasirinktas == "Dispo":
     dispo.show(conn, c)
 elif pasirinktas == "Kroviniai":
