@@ -100,9 +100,12 @@ def show(conn, c):
             'vadybininkas': 'Transporto vadybininkas'
         }, inplace=True)
 
-        # Split drivers into two columns and fill missing
+        # Split drivers into two columns and ensure two columns exist
         drivers = df_disp.get('vairuotojai', pd.Series(dtype=str)).fillna('')
-        drivers_df = drivers.str.split(', ', n=1, expand=True).fillna('')
+        drivers_df = drivers.str.split(', ', n=1, expand=True)
+        if drivers_df.shape[1] < 2:
+            drivers_df[1] = ''
+        drivers_df = drivers_df.fillna('')
         df_disp['Vairuotojas 1'] = drivers_df[0]
         df_disp['Vairuotojas 2'] = drivers_df[1]
         df_disp.drop(columns=['vairuotojai'], inplace=True)
@@ -173,7 +176,6 @@ def show(conn, c):
         numeris_row, drv_str = row
         if drv_str:
             for drv in drv_str.split(', '):
-                # If editing, skip current's existing drivers
                 if not (not is_new and numeris_row == sel and drv):
                     assigned_set.add(drv)
 
