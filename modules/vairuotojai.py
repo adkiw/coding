@@ -14,7 +14,7 @@ TAUTYBES = [
 ]
 
 def show(conn, c):
-    # 1) Užtikrinkime, kad 'vairuotojai' lentelėje būtų reikalingi stulpeliai
+    # 1) Užtikriname, kad lentelėje 'vairuotojai' būtų reikiami stulpeliai
     existing = [r[1] for r in c.execute("PRAGMA table_info(vairuotojai)").fetchall()]
     extras = {
         'vardas': 'TEXT',
@@ -27,7 +27,7 @@ def show(conn, c):
             c.execute(f"ALTER TABLE vairuotojai ADD COLUMN {col} {typ}")
     conn.commit()
 
-    # 2) Surenkame informaciją apie tai, kam kokį vilkiką priskyrė vilkikų modulis
+    # 2) Surenkame informaciją iš 'vilkikai' apie tai, kam koks vairuotojas priskirtas
     driver_to_vilk = {}
     for numeris, drv_str in c.execute("SELECT numeris, vairuotojai FROM vilkikai").fetchall():
         if drv_str:
@@ -41,15 +41,15 @@ def show(conn, c):
     def clear_sel():
         st.session_state.selected_vair = None
 
-    def new():
+    def new_vair():
         st.session_state.selected_vair = 0
 
-    def edit(id):
+    def edit_vair(id):
         st.session_state.selected_vair = id
 
     sel = st.session_state.selected_vair
 
-    # 4) Redagavimo forma: nėra „priskirtas_vilkikas“ lauko
+    # 4) Redagavimo forma (kai pasirinktas esamas vairuotojas)
     if sel not in (None, 0):
         df_sel = pd.read_sql_query(
             "SELECT * FROM vairuotojai WHERE id = ?", conn, params=(sel,)
@@ -176,12 +176,12 @@ def show(conn, c):
         st.info("ℹ️ Nėra vairuotojų.")
         return
 
-    # 6.1) „Pridėti vairuotoją“ mygtukas per visą plotį, rodome virš filtrų
-    st.button("➕ Pridėti vairuotoją", on_click=new, use_container_width=True)
+    # 6.1) Mygtukas „➕ Pridėti vairuotoją“ per visą plotį virš filtrų
+    st.button("➕ Pridėti vairuotoją", on_click=new_vair, use_container_width=True)
 
-    # 6.2) Paruošiame duomenis rodymui: visus None/NaN pakeičiame į tuščias eilutes
+    # 6.2) Paruošiame duomenis rodymui: pridedame 'id', pildome None → ''
     df = df.fillna('')
-    df_disp = df[['vardas', 'pavarde', 'gimimo_metai', 'tautybe']].copy()
+    df_disp = df[['id', 'vardas', 'pavarde', 'gimimo_metai', 'tautybe']].copy()
     df_disp.rename(
         columns={
             'vardas': 'Vardas',
@@ -199,19 +199,21 @@ def show(conn, c):
         assigned.append(driver_to_vilk.get(name, ""))
     df_disp['Priskirtas vilkikas'] = assigned
 
-    # 6.4) Filtravimo laukai (t.y. filtro tekstiniai įvesties langeliai)
+    # 6.4) Filtravimo laukai
     filter_cols = st.columns(len(df_disp.columns) + 1)
     for i, col in enumerate(df_disp.columns):
         filter_cols[i].text_input(col, key=f"f_{col}")
-    filter_cols[-1].write("")  # tuščias stulpelis filtrui, be įvesties
+    filter_cols[-1].write("")
 
     df_filt = df_disp.copy()
     for col in df_disp.columns:
         val = st.session_state.get(f"f_{col}", "")
         if val:
-            df_filt = df_filt[df_filt[col].astype(str).str.contains(val, case=False, na=False)]
+            df_filt = df_filt[
+                df_filt[col].astype(str).str.contains(val, case=False, na=False)
+            ]
 
-    # 6.5) ČIA – vienintelis lentelės antraštės blokas PO filtrų
+    # 6.5) Vienintelis lentelės antraštės blokas po filtrų
     hdr = st.columns(len(df_filt.columns) + 1)
     for i, col in enumerate(df_filt.columns):
         hdr[i].markdown(f"**{col}**")
@@ -222,10 +224,11 @@ def show(conn, c):
         row_cols = st.columns(len(df_filt.columns) + 1)
         for i, col in enumerate(df_filt.columns):
             row_cols[i].write(row[col])
+        # Naudojame row['id'], nes df_disp dabar turi id stulpelį
         row_cols[-1].button(
             "✏️",
             key=f"edit_{row['id']}",
-            on_click=edit,
+            on_click=edit_vair,
             args=(row['id'],)
         )
 
