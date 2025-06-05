@@ -65,21 +65,18 @@ def show(conn, c):
         start_date + datetime.timedelta(days=i)
         for i in range((end_date - start_date).days + 1)
     ]
-    date_strs = [d.isoformat() for d in date_list]  # pvz. ['2025-06-03', ..., '2025-06-17']
+    date_strs = [d.isoformat() for d in date_list]
 
     # ==============================
     # 4) Paimame visų vilkikų informaciją: numeris, priekaba, vadybininkas
     # ==============================
     c.execute("SELECT numeris, priekaba, vadybininkas FROM vilkikai ORDER BY numeris")
-    vilkikai_rows = c.fetchall()  # [(numeris, priekaba, vadybininkas), ...]
-    vilkikai_all = [row[0] for row in vilkikai_rows]
-
+    vilkikai_rows = c.fetchall()
     priekaba_map = {row[0]: (row[1] or "") for row in vilkikai_rows}
     vadybininkas_map = {row[0]: (row[2] or "") for row in vilkikai_rows}
 
     # ==============================
     # 5) Iš lentelės "kroviniai" paimame įrašus su iškrovimo data šiame intervale
-    #    – ištraukiame vilkikas, iskrovimo_salis, iskrovimo_regionas, date(iskrovimo_data), date(pakrovimo_data)
     # ==============================
     start_str = start_date.isoformat()
     end_str = end_date.isoformat()
@@ -111,7 +108,7 @@ def show(conn, c):
     df["vietos_kodas"] = df["salis"] + df["regionas"]  # pvz. "IT10"
 
     # ==============================
-    # 7) Filtravimas pagal ekspedicijos grupę (jei pasirinkta ne „Visi“)
+    # 7) Filtravimas pagal ekspedicijos grupę
     # ==============================
     if selected != "Visi":
         numeris = selected.split(" – ")[0]
@@ -121,7 +118,7 @@ def show(conn, c):
                 "SELECT regiono_kodas FROM grupiu_regionai WHERE grupe_id = ?",
                 (grupe_id,)
             )
-            regionai = [row[0] for row in c.fetchall()]  # pvz. ["FR10", "IT20", ...]
+            regionai = [row[0] for row in c.fetchall()]
             df = df[df["vietos_kodas"].apply(lambda x: any(x.startswith(r) for r in regionai))]
 
     if df.empty:
@@ -132,18 +129,14 @@ def show(conn, c):
     # 8) Parenkame tik paskutinį (didžiausią) kiekvieno vilkiko įrašą šiame intervale
     # ==============================
     df_last = df.loc[df.groupby("vilkikas")["data"].idxmax()].copy()
-    # df_last turi stulpelius: vilkikas, salis, regionas, data, pak_data, vietos_kodas
 
     # ==============================
-    # 9) Iš lentelės "vilkiku_darbo_laikai" paimame papildomus laukus pagal pakrovimo datą:
-    #    – iškrovimo_laikas (ikr_laikas)
-    #    – darbo_laikas    (bdl)
-    #    – likes_laikas    (ldl)
+    # 9) Iš "vilkiku_darbo_laikai" paimame papildomus laukus pagal pakrovimo datą
     # ==============================
     papildomi_map = {}
     for _, row in df_last.iterrows():
         v = row["vilkikas"]
-        pak_d = row["pak_data"]  # pvz. "2025-06-07"
+        pak_d = row["pak_data"]
         rc = c.execute(
             """
             SELECT iskrovimo_laikas, darbo_laikas, likes_laikas
@@ -181,16 +174,13 @@ def show(conn, c):
         }
 
     # ==============================
-    # 10) Paruošiame funkciją formuoti langelio reikšmę:
-    #     – vietos_kodas ikr_laikas_or_-- bdl_or_-- ldl_or_--
-    #     – jeigu vietos_kodas tuščias: tuščias langelis
+    # 10) Funkcija formuoti langelio reikšmę
     # ==============================
-    def make_cell(vilkikas, iskr_data, vieta):
+    def make_cell(vilk, iskr_data, vieta):
         if not vieta:
             return ""
-        info = papildomi_map.get((vilkikas, iskr_data), {})
-        parts = []
-        parts.append(vieta)
+        info = papildomi_map.get((vilk, iskr_data), {})
+        parts = [vieta]
         ikr = info.get("ikr_laikas", "")
         parts.append(ikr if ikr else "--")
         bdl_val = info.get("bdl", "")
@@ -205,10 +195,7 @@ def show(conn, c):
     )
 
     # ==============================
-    # 11) Sukuriame pivot lentelę:
-    #       – index   = vilkikas
-    #       – columns = data (iškrovimo data)
-    #       – values  = cell_val
+    # 11) Sukuriame pivot lentelę
     # ==============================
     pivot_df = df_last.pivot(
         index="vilkikas",
@@ -222,12 +209,12 @@ def show(conn, c):
     pivot_df = pivot_df.reindex(columns=date_strs, fill_value="")
 
     # ==============================
-    # 13) Filtruojame eilutes: rodome tik tuos vilkikus, kurie turi df_last įrašą
+    # 13) Filtruojame eilutes: tik vilkikai, turintys įrašą
     # ==============================
     pivot_df = pivot_df.reindex(index=df_last["vilkikas"].unique(), fill_value="")
 
     # ==============================
-    # 14) Paimame SA (paskutinę) iš vilkiku_darbo_laikai kiekvienam vilkikui
+    # 14) Paimame SA iš "vilkiku_darbo_laikai"
     # ==============================
     sa_map = {}
     for v in pivot_df.index:
@@ -244,11 +231,7 @@ def show(conn, c):
         sa_map[v] = row[0] if row and row[0] is not None else ""
 
     # ==============================
-    # 15) Sukuriame indekso pavadinimą:
-    #       – vilkikas
-    #       – jei yra priekaba: "/priekaba"
-    #       – jei yra vadybininkas: " vadybininkas"
-    #       – jei yra SA: " SA"
+    # 15) Sukuriame indekso pavadinimą
     # ==============================
     combined_index = []
     for v in pivot_df.index:
@@ -268,26 +251,6 @@ def show(conn, c):
     pivot_df.index.name = "Vilkikas/Priekaba Vadybininkas SA"
 
     # ==============================
-    # 16) Atvaizduojame HTML lentelę su horizontaliu skrolu
+    # 16) Atvaizduojame su st.dataframe, kad būtų interaktyvus ir galima rūšiuoti paspaudus ant datos
     # ==============================
-    html = "<div class='scroll-container'><table>\n"
-    html += "  <thead>\n    <tr>\n"
-    html += "      <th title='Vilkikas/Priekaba Vadybininkas SA'>Vilkikas/Priekaba Vadybininkas SA</th>\n"
-    for d in date_strs:
-        html += f"      <th>{d}</th>\n"
-    html += "    </tr>\n  </thead>\n"
-    html += "  <tbody>\n"
-    for idx in pivot_df.index:
-        html += "    <tr>\n"
-        html += f"      <td>{idx}</td>\n"
-        for d in date_strs:
-            val = pivot_df.at[idx, d]
-            if pd.isna(val) or str(val).strip() == "":
-                cell_html = ""
-            else:
-                cell_html = val
-            html += f"      <td>{cell_html}</td>\n"
-        html += "    </tr>\n"
-    html += "  </tbody>\n</table></div>"
-
-    st.markdown(html, unsafe_allow_html=True)
+    st.dataframe(pivot_df, use_container_width=True)
