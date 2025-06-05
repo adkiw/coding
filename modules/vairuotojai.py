@@ -301,17 +301,18 @@ def show(conn, c):
     filter_cols = st.columns(len(df_disp.columns) + 1)
     for i, col in enumerate(df_disp.columns):
         filter_cols[i].text_input(label="", placeholder=col, key=f"f_{col}")
-    filter_cols[-1].write("")
+    filter_cols[-1].write("")  # papildomas tuščias stulpelis filtrui
 
     df_filt = df_disp.copy()
     for col in df_disp.columns:
         val = st.session_state.get(f"f_{col}", "")
         if val:
-            # Substring (contains) filtravimas su case-insensitive
-            df_filt = df_filt[df_filt[col].astype(str).str.contains(val, case=False, na=False)]
+            # Naudojame prefix matching (startswith) vietoje substring:
+            df_filt = df_filt[
+                df_filt[col].astype(str).str.lower().str.startswith(val.lower())
+            ]
 
     # 6.6) **PAŠALINTA: header blokas po filtrų**, kad nebūtų dubliuojama.
-    #     (Nebėra hdr = st.columns(...) ir markdown eilutės.)
 
     # 6.7) Lentelės eilutės su redagavimo mygtuku
     for _, row in df_filt.iterrows():
