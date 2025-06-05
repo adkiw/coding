@@ -60,7 +60,7 @@ def show(conn, c):
         st.markdown("### 🔄 Bendras priekabų priskirstymas")
         with st.form("priekabu_priskirt_forma", clear_on_submit=True):
             vilk_list = [""] + [r[0] for r in c.execute("SELECT numeris FROM vilkikai").fetchall()]
-            pr_opts = [""]
+            pr_opts = [""] 
             for num in priekabu_list:
                 assigned = [r[0] for r in c.execute(
                     "SELECT numeris FROM vilkikai WHERE priekaba = ?", (num,)
@@ -118,17 +118,19 @@ def show(conn, c):
             lambda x: (date.fromisoformat(x) - date.today()).days if x else ''
         )
 
-        # 6.5) Filtering inputs
+        # 6.5) Filtering inputs with prefix matching
         filter_cols = st.columns(len(df_disp.columns) + 1)
         for i, col in enumerate(df_disp.columns):
-            filter_cols[i].text_input(col, key=f"f_{col}")
+            filter_cols[i].text_input(label="", placeholder=col, key=f"f_{col}")
         filter_cols[-1].write("")
 
         df_filt = df_disp.copy()
         for col in df_disp.columns:
             val = st.session_state.get(f"f_{col}", "")
             if val:
-                df_filt = df_filt[df_filt[col].astype(str).str.contains(val, case=False, na=False)]
+                df_filt = df_filt[
+                    df_filt[col].astype(str).str.lower().str.startswith(val.lower())
+                ]
 
         # 6.6) Table header
         hdr = st.columns(len(df_filt.columns) + 1)
@@ -231,7 +233,7 @@ def show(conn, c):
         # Determine pre-selected indices for v1 and v2
         v1_idx = 0
         v2_idx = 0
-        if not is_new and vilk.get('vairuotojai'):
+        if not is_new and vilk['vairuotojai']:
             parts = vilk['vairuotojai'].split(', ')
             if parts:
                 # For Vairuotojas 1
