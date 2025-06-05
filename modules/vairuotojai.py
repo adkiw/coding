@@ -14,13 +14,13 @@ TAUTYBES = [
 ]
 
 def show(conn, c):
-    # 1) Užtikriname, kad lentelėje 'vairuotojai' būtų reikiami stulpeliai
+    # 1) Užtikrinkime, kad lentelėje 'vairuotojai' būtų reikiami stulpeliai
     existing = [r[1] for r in c.execute("PRAGMA table_info(vairuotojai)").fetchall()]
     extras = {
-        'vardas': 'TEXT',
-        'pavarde': 'TEXT',
-        'gimimo_metai': 'TEXT',
-        'tautybe': 'TEXT',
+        "vardas": "TEXT",
+        "pavarde": "TEXT",
+        "gimimo_metai": "TEXT",
+        "tautybe": "TEXT",
     }
     for col, typ in extras.items():
         if col not in existing:
@@ -31,11 +31,11 @@ def show(conn, c):
     driver_to_vilk = {}
     for numeris, drv_str in c.execute("SELECT numeris, vairuotojai FROM vilkikai").fetchall():
         if drv_str:
-            for name in drv_str.split(', '):
+            for name in drv_str.split(", "):
                 driver_to_vilk[name] = numeris
 
     # 3) Inicijuojame sesijos būseną
-    if 'selected_vair' not in st.session_state:
+    if "selected_vair" not in st.session_state:
         st.session_state.selected_vair = None
 
     def clear_sel():
@@ -49,7 +49,7 @@ def show(conn, c):
 
     sel = st.session_state.selected_vair
 
-    # 4) Redagavimo forma (kai pasirinktas esamas vairuotojas)
+    # 4) Redagavimo forma (kai pasirinktame esamas vairuotojas)
     if sel not in (None, 0):
         df_sel = pd.read_sql_query(
             "SELECT * FROM vairuotojai WHERE id = ?", conn, params=(sel,)
@@ -62,25 +62,26 @@ def show(conn, c):
         row = df_sel.iloc[0]
         with st.form("edit_form", clear_on_submit=False):
             vardas = st.text_input(
-                "Vardas", value=row.get('vardas', ''), key="vardas"
+                "Vardas", value=row.get("vardas", ""), key="vardas"
             )
             pavarde = st.text_input(
-                "Pavardė", value=row.get('pavarde', ''), key="pavarde"
+                "Pavardė", value=row.get("pavarde", ""), key="pavarde"
             )
             gim_data = st.date_input(
                 "Gimimo data",
                 value=(
-                    date.fromisoformat(row['gimimo_metai'])
-                    if row.get('gimimo_metai') else date(1980, 1, 1)
+                    date.fromisoformat(row["gimimo_metai"])
+                    if row.get("gimimo_metai")
+                    else date(1980, 1, 1)
                 ),
                 min_value=date(1950, 1, 1),
-                key="gim_data"
+                key="gim_data",
             )
             tautybes_opts = [f"{name} ({code})" for name, code in TAUTYBES]
             tautybe_index = 0
-            if row.get('tautybe'):
+            if row.get("tautybe"):
                 for idx, v in enumerate(tautybes_opts):
-                    if row['tautybe'] in v:
+                    if row["tautybe"] in v:
                         tautybe_index = idx
                         break
             tautybe = st.selectbox(
@@ -109,11 +110,13 @@ def show(conn, c):
                             st.session_state.vardas,
                             st.session_state.pavarde,
                             st.session_state.gim_data.isoformat()
-                            if st.session_state.gim_data else "",
+                            if st.session_state.gim_data
+                            else "",
                             st.session_state.tautybe.split("(")[-1][:-1]
-                            if "(" in st.session_state.tautybe else st.session_state.tautybe,
-                            sel
-                        )
+                            if "(" in st.session_state.tautybe
+                            else st.session_state.tautybe,
+                            sel,
+                        ),
                     )
                     conn.commit()
                     st.success("✅ Pakeitimai išsaugoti.")
@@ -131,7 +134,7 @@ def show(conn, c):
                 "Gimimo data",
                 value=date(1980, 1, 1),
                 min_value=date(1950, 1, 1),
-                key="gim_data"
+                key="gim_data",
             )
             tautybes_opts = [f"{name} ({code})" for name, code in TAUTYBES]
             tautybe = st.selectbox("Tautybė", tautybes_opts, key="tautybe")
@@ -158,10 +161,12 @@ def show(conn, c):
                             st.session_state.vardas,
                             st.session_state.pavarde,
                             st.session_state.gim_data.isoformat()
-                            if st.session_state.gim_data else "",
+                            if st.session_state.gim_data
+                            else "",
                             st.session_state.tautybe.split("(")[-1][:-1]
-                            if "(" in st.session_state.tautybe else st.session_state.tautybe
-                        )
+                            if "(" in st.session_state.tautybe
+                            else st.session_state.tautybe,
+                        ),
                     )
                     conn.commit()
                     st.success("✅ Vairuotojas įrašytas.")
@@ -179,17 +184,17 @@ def show(conn, c):
     # 6.1) Mygtukas „➕ Pridėti vairuotoją“ per visą plotį virš filtrų
     st.button("➕ Pridėti vairuotoją", on_click=new_vair, use_container_width=True)
 
-    # 6.2) Paruošiame duomenis rodymui: pridedame 'id', pildome None → ''
-    df = df.fillna('')
-    df_disp = df[['id', 'vardas', 'pavarde', 'gimimo_metai', 'tautybe']].copy()
+    # 6.2) Paruošiame duomenis rodymui: įtraukiame 'id', užpildome None → ''
+    df = df.fillna("")
+    df_disp = df[["id", "vardas", "pavarde", "gimimo_metai", "tautybe"]].copy()
     df_disp.rename(
         columns={
-            'vardas': 'Vardas',
-            'pavarde': 'Pavardė',
-            'gimimo_metai': 'Gimimo data',
-            'tautybe': 'Tautybė'
+            "vardas": "Vardas",
+            "pavarde": "Pavardė",
+            "gimimo_metai": "Gimimo data",
+            "tautybe": "Tautybė",
         },
-        inplace=True
+        inplace=True,
     )
 
     # 6.3) Pridedame stulpelį „Priskirtas vilkikas“ pagal vilkikų modulio duomenis
@@ -197,7 +202,7 @@ def show(conn, c):
     for _, row in df.iterrows():
         name = f"{row['vardas']} {row['pavarde']}"
         assigned.append(driver_to_vilk.get(name, ""))
-    df_disp['Priskirtas vilkikas'] = assigned
+    df_disp["Priskirtas vilkikas"] = assigned
 
     # 6.4) Filtravimo laukai
     filter_cols = st.columns(len(df_disp.columns) + 1)
@@ -224,19 +229,19 @@ def show(conn, c):
         row_cols = st.columns(len(df_filt.columns) + 1)
         for i, col in enumerate(df_filt.columns):
             row_cols[i].write(row[col])
-        # Naudojame row['id'], nes df_disp dabar turi id stulpelį
+        # Naudojame row['id'], nes 'id' dabar yra df_disp stulpelyje
         row_cols[-1].button(
             "✏️",
             key=f"edit_{row['id']}",
             on_click=edit_vair,
-            args=(row['id'],)
+            args=(row["id"],),
         )
 
     # 6.7) Eksportas į CSV
-    csv = df.to_csv(index=False, sep=';').encode('utf-8')
+    csv = df.to_csv(index=False, sep=";").encode("utf-8")
     st.download_button(
         label="💾 Eksportuoti kaip CSV",
         data=csv,
         file_name="vairuotojai.csv",
-        mime="text/csv"
+        mime="text/csv",
     )
