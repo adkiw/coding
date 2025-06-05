@@ -76,8 +76,8 @@ def relative_time(created_str):
     if hours > 0:
         return f"{hours} val."
     if minutes > 0:
-        return f"{minutes} min."
-    return "ką tik"
+        return f"{minutes}"
+    return ""
 
 def show(conn, c):
     st.title("Padėties atnaujinimai")
@@ -132,12 +132,10 @@ def show(conn, c):
 
     vilkikai = []
     for v, g in vilkikai_info:
-        # Filtras: Transporto vadybininkas
         if vadyb and c.execute(
             "SELECT vadybininkas FROM vilkikai WHERE numeris = ?", (v,)
         ).fetchone()[0] != vadyb:
             continue
-        # Filtras: Transporto grup4
         if grupe_filtras and (g or "") != grupe_filtras:
             continue
         vilkikai.append(v)
@@ -169,7 +167,7 @@ def show(conn, c):
     kroviniai = c.execute(query, params).fetchall()
 
     # ==============================
-    # 5) Sudarome žemėlapius transporto grupėms ir ekspedicijos grupėms
+    # 5) Žemėlapiai transporto ir ekspedicijos grupėms
     # ==============================
     vilk_grupes = dict(c.execute("""
         SELECT v.numeris, g.pavadinimas
@@ -185,11 +183,11 @@ def show(conn, c):
     """).fetchall())
 
     # ==============================
-    # 6) Nustatome stulpelių proporcijas (vienetai proporcingi)
+    # 6) Stulpelių proporcijos
     # ==============================
     col_widths = [
         0.5,   # Save
-        0.85,  # Atn. (relative laikas)
+        0.85,  # Atn.
         0.4,   # Vilk.
         0.4,   # Priek.
         0.7,   # P.D.
@@ -199,23 +197,24 @@ def show(conn, c):
         0.7,   # I.L.
         1.0,   # I.V.
         0.6,   # Km
+        0.45,  # E.Vad.
         0.45,  # SA
         0.45,  # BDL
         0.45,  # LDL
         0.8,   # P.D.* 
         0.5,   # P.L.* 
-        0.75,  # P.St.* (status)
+        0.75,  # P.St.* 
         0.8,   # I.D.* 
         0.5,   # I.L.* 
-        0.75,  # I.St.* (status)
+        0.75,  # I.St.* 
         1.0    # Kom.
     ]
 
     headers = [
         ("💾",      "Save"),                    # Save
-        ("Atn.",    "Atnaujinta prieš kiek laiko"),  # Relative laikas
-        ("Vilk.",   "Vilkikas"),                # Vilkikas
-        ("Priek.",  "Priekaba"),                 # Priekaba
+        ("Atn.",    "Atnaujinta (kiek laiko)"), # Atn.
+        ("Vilk.",   "Vilkikas"),                # Vilk.
+        ("Priek.",  "Priekaba"),                 # Priek.
         ("P.D.",    "Pakrovimo data"),           # P.D.
         ("P.L.",    "Pakrovimo laikas"),         # P.L.
         ("P.V.",    "Pakrovimo vieta"),          # P.V.
@@ -223,6 +222,7 @@ def show(conn, c):
         ("I.L.",    "Iškrovimo laikas"),         # I.L.
         ("I.V.",    "Iškrovimo vieta"),          # I.V.
         ("Km",      "Kilometražas"),             # Km
+        ("E.Vad.",  "Ekspedicijos vadybininkas"),# E.Vad.
         ("SA",      "Savaitinė atstova"),        # SA
         ("BDL",     "Vairuotojo darbo laiko pabaiga"),  # BDL
         ("LDL",     "Vairuotojo likusios darbo valandos"), # LDL
@@ -236,7 +236,7 @@ def show(conn, c):
     ]
 
     # ==============================
-    # 7) Rodyti antraštę su headeriais vienoje eilutėje su tooltips
+    # 7) Rodyti antraštę su tooltips ir scroll
     # ==============================
     st.markdown("<div class='scroll-container'>", unsafe_allow_html=True)
     cols = st.columns(col_widths)
@@ -244,10 +244,9 @@ def show(conn, c):
         cols[i].markdown(f"<b title='{full}'>{abbr}</b>", unsafe_allow_html=True)
 
     # ==============================
-    # 8) Rodyti kiekvieną krovinį – viskas vienoje eilutėje
+    # 8) Rodyti kiekvieną krovinį – vienoje eilutėje
     # ==============================
     for k in kroviniai:
-        # 8.1) Paimame paskutinį įrašą iš vilkiku_darbo_laikai
         darbo = c.execute("""
             SELECT sa, darbo_laikas, likes_laikas, created_at,
                    pakrovimo_statusas, pakrovimo_laikas, pakrovimo_data,
@@ -259,7 +258,6 @@ def show(conn, c):
             ORDER BY id DESC LIMIT 1
         """, (k[5], k[3])).fetchone()
 
-        # 8.2) Patikriname, ar krovinys "Iškrauta" ir senesnis nei šiandien → praleidžiame
         if darbo and darbo[7] == "Iškrauta":
             try:
                 iskrov_data = pd.to_datetime(darbo[9]).date()
@@ -272,11 +270,9 @@ def show(conn, c):
             continue
 
         # 8.3) Paruošiame rodomus laukus
-        # 8.3.1 Relative atnaujinimo laikas (tik laikas, be „prieš“)
         created = darbo[3] if darbo and darbo[3] else None
         rel_atn = relative_time(created) if created else ""
 
-        # 8.3.2 Kiti laukai
         sa          = darbo[0] if darbo and darbo[0] else ""
         bdl         = darbo[1] if darbo and darbo[1] not in [None, ""] else ""
         ldl         = darbo[2] if darbo and darbo[2] not in [None, ""] else ""
@@ -284,16 +280,16 @@ def show(conn, c):
         pk_laikas   = darbo[5] if darbo and darbo[5] else (str(k[7])[:5] if k[7] else "")
         pk_data     = darbo[6] if darbo and darbo[6] else str(k[3])
         komentaras  = darbo[10] if darbo and darbo[10] else ""
-        eksp_vad    = ""  # Išimame ekspedicijos vadybininką
-        trans_gr    = ""  # Išimame transporto grupę
-        eksp_gr     = ""  # Išimame ekspedicijos grupę
+        eksp_vad    = darbo[12] if darbo and darbo[12] else k[16] if len(k) > 16 else ""
+        trans_gr    = ""  # pašalintas
+        eksp_gr     = ""  # pašalintas
 
         row_cols = st.columns(col_widths)
 
         # 8.4) Save mygtukas
         save = row_cols[0].button("💾", key=f"save_{k[0]}")
 
-        # 8.5) Atnaujinta prieš kiek laiko (tik laikas, pvz. "3 d.", "2 val.")
+        # 8.5) Atnaujinta (tik relative laikas be 'prieš' ir 'min')
         row_cols[1].write(rel_atn)
 
         # 8.6) Vilkikas
@@ -321,65 +317,72 @@ def show(conn, c):
         # 8.14) Km
         row_cols[10].write(str(k[15]))
 
-        # 8.15) SA – tekstinis įvesties laukas
-        sa_in = row_cols[11].text_input("", value=str(sa), key=f"sa_{k[0]}", label_visibility="collapsed")
-        # 8.16) BDL – tekstinis įvesties laukas
-        bdl_in = row_cols[12].text_input("", value=str(bdl), key=f"bdl_{k[0]}", label_visibility="collapsed")
-        # 8.17) LDL – tekstinis įvesties laukas
-        ldl_in = row_cols[13].text_input("", value=str(ldl), key=f"ldl_{k[0]}", label_visibility="collapsed")
+        # 8.15) Ekspedicijos vadybininkas
+        row_cols[11].write(eksp_vad or "")
 
-        # 8.18) Pakrovimo data (edit)
+        # 8.16) SA – įvesties langelis
+        sa_in = row_cols[12].text_input("", value=str(sa), key=f"sa_{k[0]}", label_visibility="collapsed")
+        # 8.17) BDL – įvesties langelis
+        bdl_in = row_cols[13].text_input("", value=str(bdl), key=f"bdl_{k[0]}", label_visibility="collapsed")
+        # 8.18) LDL – įvesties langelis
+        ldl_in = row_cols[14].text_input("", value=str(ldl), key=f"ldl_{k[0]}", label_visibility="collapsed")
+
+        # 8.19) Pakrovimo data (edit)
         try:
             default_pk_date = datetime.fromisoformat(pk_data).date()
         except:
             default_pk_date = datetime.now().date()
         pk_data_key = f"pk_date_{k[0]}"
-        pk_data_in = row_cols[14].date_input(
+        pk_data_in = row_cols[15].date_input(
             "", value=default_pk_date, key=pk_data_key, label_visibility="collapsed"
         )
 
-        # 8.19) Pakrovimo laikas (edit)
+        # 8.20) Pakrovimo laikas (edit)
         pk_time_key = f"pk_time_{k[0]}"
         formatted_pk = format_time_str(pk_laikas) if pk_laikas else ""
-        pk_laikas_in = row_cols[15].text_input(
+        pk_laikas_in = row_cols[16].text_input(
             "", value=formatted_pk, key=pk_time_key, label_visibility="collapsed", placeholder="HHMM"
         )
 
-        # 8.20) Pakrovimo statusas (edit) – tekstinis įvesties laukas
-        pk_status_in = row_cols[16].text_input(
-            "", value=pk_status, key=f"pk_status_{k[0]}", label_visibility="collapsed"
+        # 8.21) Pakrovimo statusas – įvesties laukas su placeholder
+        pk_status_key = f"pk_status_{k[0]}"
+        pk_status_in = row_cols[17].text_input(
+            "", value=pk_status, key=pk_status_key, label_visibility="collapsed",
+            placeholder="Atvyko / Pakrauta / Kita"
         )
 
-        # 8.21) Iškr. data (edit)
+        # 8.22) Iškr. data (edit)
         try:
             ikr_data = darbo[9] if darbo and darbo[9] else str(k[4])
             default_ikr_date = datetime.fromisoformat(ikr_data).date()
         except:
             default_ikr_date = datetime.now().date()
         ikr_data_key = f"ikr_date_{k[0]}"
-        ikr_data_in = row_cols[17].date_input(
+        ikr_data_in = row_cols[18].date_input(
             "", value=default_ikr_date, key=ikr_data_key, label_visibility="collapsed"
         )
 
-        # 8.22) Iškr. laikas (edit)
+        # 8.23) Iškr. laikas (edit)
         ikr_laikas = darbo[8] if darbo and darbo[8] else (str(k[9])[:5] if k[9] else "")
         ikr_time_key = f"ikr_time_{k[0]}"
         formatted_ikr = format_time_str(ikr_laikas) if ikr_laikas else ""
-        ikr_laikas_in = row_cols[18].text_input(
+        ikr_laikas_in = row_cols[19].text_input(
             "", value=formatted_ikr, key=ikr_time_key, label_visibility="collapsed", placeholder="HHMM"
         )
 
-        # 8.23) Iškr. statusas (edit) – tekstinis įvesties laukas
-        ikr_status_in = row_cols[19].text_input(
-            "", value=(darbo[7] if darbo and darbo[7] else ""), key=f"ikr_status_{k[0]}", label_visibility="collapsed"
+        # 8.24) Iškr. statusas – įvesties laukas su placeholder
+        ikr_status_key = f"ikr_status_{k[0]}"
+        ikr_status_in = row_cols[20].text_input(
+            "", value=darbo[7] if darbo and darbo[7] else "", key=ikr_status_key, label_visibility="collapsed",
+            placeholder="Atvyko / Iškrauta / Kita"
         )
 
-        # 8.24) Komentaras (edit)
-        komentaras_in = row_cols[20].text_input(
+        # 8.25) Komentaras (edit)
+        komentaras_in = row_cols[21].text_input(
             "", value=komentaras, key=f"komentaras_{k[0]}", label_visibility="collapsed"
         )
 
-        # 8.25) Išsaugojimo (Save) logika
+        # 8.26) Išsaugojimo (Save) logika
         if save:
             jau_irasas = c.execute("""
                 SELECT id FROM vilkiku_darbo_laikai WHERE vilkiko_numeris = ? AND data = ?
@@ -387,6 +390,7 @@ def show(conn, c):
             now_str = datetime.now().isoformat()
             formatted_pk_date = pk_data_in.isoformat()
             formatted_ikr_date = ikr_data_in.isoformat()
+
             if jau_irasas:
                 c.execute("""
                     UPDATE vilkiku_darbo_laikai
