@@ -2,12 +2,27 @@
 
 import streamlit as st
 from datetime import date, timedelta
-import random
-import hashlib
 
 def show(conn, c):
     st.title("DISPO – Planavimo lentelė su grupėmis")
 
+    # ==============================
+    # 0) Įsitikiname, kad lentelėje "vilkiku_darbo_laikai" egzistuoja
+    #    skirti stulpeliai. Jei ne – pridedame juos automatiškai.
+    # ==============================
+    existing_cols = {row[1] for row in c.execute("PRAGMA table_info(vilkiku_darbo_laikai)").fetchall()}
+    extra_cols = [
+        ("ats_ekspedicijos_vadybininkas", "TEXT"),
+        ("eksp_grupe",                "TEXT")
+    ]
+    for col, coltype in extra_cols:
+        if col not in existing_cols:
+            c.execute(f"ALTER TABLE vilkiku_darbo_laikai ADD COLUMN {col} {coltype}")
+    conn.commit()
+
+    # ==============================
+    # 1) Kalendoriaus intervalas: vartotojas pasirenka
+    # ==============================
     lt_weekdays = {
         0: "Pirmadienis", 1: "Antradienis", 2: "Trečiadienis",
         3: "Ketvirtadienis", 4: "Penktadienis", 5: "Šeštadienis", 6: "Sekmadienis"
@@ -26,7 +41,7 @@ def show(conn, c):
     today = date.today()
     this_monday = iso_monday(today)
     start_default = this_monday - timedelta(weeks=2)
-    end_default = this_monday + timedelta(weeks=2, days=6)
+    end_default   = this_monday + timedelta(weeks=2, days=6)
 
     c1, c2 = st.columns(2)
     with c1:
@@ -43,116 +58,69 @@ def show(conn, c):
     dates = [start_date + timedelta(days=i) for i in range(num_days)]
     st.write(f"Rodyti {num_days} dienų nuo {start_date} iki {end_date}.")
 
+    # ==============================
+    # 2) Antraštės: bendri laukai + dienų blokų pavadinimai
+    # ==============================
     common_headers = [
         "Transporto grupė", "Ekspedicijos grupės nr.",
-        "Vilkiko nr.", "Ekspeditorius",
-        "Trans. vadybininkas", "Priekabos nr.",
-        "Vair. sk.", "Savaitinė atstova", "Pastabos"
+        "Vilkiko nr.",       "Ekspeditorius",
+        "Trans. vadybininkas","Priekabos nr.",
+        "Vair. sk.",         "Savaitinė atstova",
+        "Pastabos"
     ]
     day_headers = [
-        "B. d. laikas", "L. d. laikas", "Atvykimo laikas",
-        "Laikas nuo", "Laikas iki", "Vieta",
-        "Atsakingas", "Tušti km", "Krauti km",
-        "Kelių išlaidos", "Frachtas"
+        "B. d. laikas",   "L. d. laikas",    "Atvykimo laikas",
+        "Laikas nuo",     "Laikas iki",      "Vieta",
+        "Atsakingas",     "Tušti km",        "Krauti km",
+        "Kelių išlaidos","Frachtas"
     ]
 
+    # ==============================
+    # 3) Pagrindinė užklausa – surenkame duomenis kiekvienam vilkikui
+    # ==============================
+    # Čia klaidingą e.grupe pataisome į e.eksp_grupe
     trucks_info = c.execute("""
         SELECT
-            tg.numeris AS trans_grupe,
-            eg.numeris AS eksp_grupe,
-            v.numeris,
-            e.vardas || ' ' || e.pavarde AS ekspeditorius,
-            t.vardas || ' ' || t.pavarde AS vadybininkas,
-            v.priekaba,
-            (SELECT COUNT(*) FROM vairuotojai WHERE priskirtas_vilkikas = v.numeris) AS vair_sk,
-            42 AS savaitine_atstova
+            v.numeris AS vilkikas,
+            v.priekaba AS priekaba,
+            d.vardas || ' ' || d.pavarde AS vadybininkas,
+            g.pavadinimas AS trans_grupė,
+            e.ats_ekspedicijos_vadybininkas AS eksp_vad,
+            eg.pavadinimas AS eksp_grupė
         FROM vilkikai v
-        LEFT JOIN darbuotojai t ON v.vadybininkas = t.vardas
-        LEFT JOIN grupes tg ON t.grupe = tg.pavadinimas
-        LEFT JOIN darbuotojai e ON v.vairuotojai LIKE '%' || e.vardas || '%'
-        LEFT JOIN grupes eg ON e.grupe = eg.pavadinimas
+        LEFT JOIN darbuotojai d
+            ON v.vadybininkas = d.vardas
+        LEFT JOIN grupes g
+            ON d.grupe = g.pavadinimas
+        LEFT JOIN (
+            SELECT vilkiko_numeris,
+                   ats_ekspedicijos_vadybininkas,
+                   eksp_grupe
+            FROM vilkiku_darbo_laikai
+            ORDER BY id DESC
+            LIMIT 1
+        ) e
+            ON v.numeris = e.vilkiko_numeris
+        LEFT JOIN grupes eg
+            ON e.eksp_grupe = eg.pavadinimas
     """).fetchall()
 
-    all_eksp = sorted({t[3] for t in trucks_info})
-    sel_eksp = st.multiselect("Filtruok pagal ekspeditorius", options=all_eksp, default=all_eksp)
+    # ==============================
+    # 4) Jeigu nėra duomenų, pranešame
+    # ==============================
+    if not trucks_info:
+        st.info("Šiuo laikotarpiu nėra duomenų susijusių su vilkikais.")
+        return
 
-    st.markdown("""
-    <style>
-      .table-container { overflow-x: auto; }
-      .table-container table {
-        border-collapse: collapse;
-        display: inline-block;
-        white-space: nowrap;
-      }
-      th, td {
-        border:1px solid #ccc;
-        padding:4px;
-        text-align:center;
-      }
-      th {
-        background:#f5f5f5;
-        position:sticky;
-        top:0;
-        z-index:1;
-      }
-    </style>
-    """, unsafe_allow_html=True)
+    # ==============================
+    # 5) Atvaizduojame lentelę vartotojui (pavyzdžiui, paprasta st.write())
+    #    Čia galite patys suformatuoti pagal poreikį (DataFrame, HTML ir pan.)
+    # ==============================
+    import pandas as pd
 
-    def get_rnd(truck: str, day: str) -> random.Random:
-        seed = int(hashlib.md5(f"{truck}-{day}".encode()).hexdigest(), 16)
-        return random.Random(seed)
+    df = pd.DataFrame(trucks_info, columns=[
+        "Vilkikas", "Priekaba", "Vadybininkas", "Transporto grupė",
+        "Eksp. vadovas", "Eksp. grupė"
+    ])
 
-    total_common = len(common_headers)
-    total_day_cols = len(dates) * len(day_headers)
-    total_all_cols = 1 + total_common + total_day_cols
-
-    html = '<div class="table-container"><table>\n'
-    html += "<tr>" + "".join(f"<th>{col_letter(i)}</th>" for i in range(1, total_all_cols + 1)) + "</tr>\n"
-    html += "<tr><th></th><th colspan=\"{}\"></th>".format(total_common)
-    for d in dates:
-        wd = lt_weekdays[d.weekday()]
-        html += f'<th colspan="{len(day_headers)}">{d:%Y-%m-%d} {wd}</th>'
-    html += "</tr>\n"
-
-    html += "<tr><th>#</th>" + "".join(f"<th>{h}</th>" for h in common_headers)
-    for _ in dates:
-        for hh in day_headers:
-            html += f"<th>{hh}</th>"
-    html += "</tr>\n"
-
-    row_num = 1
-    for row in trucks_info:
-        if row[3] not in sel_eksp:
-            continue
-        html += f"<tr><td>{row_num}</td>"
-        for val in row:
-            html += f'<td rowspan="2">{val}</td>'
-        html += "<td></td>"
-        for d in dates:
-            key = d.strftime("%Y-%m-%d")
-            rnd = get_rnd(row[2], key)
-            atv = f"{rnd.randint(0, 23):02d}:{rnd.randint(0, 59):02d}"
-            city = rnd.choice(["Vilnius", "Kaunas", "Berlin"])
-            html += ("<td></td><td></td>"
-                     f"<td>{atv}</td><td></td><td></td>"
-                     f"<td>{city}</td>" + "<td></td>" * 5)
-        html += "</tr>\n"
-
-        html += f"<tr><td>{row_num + 1}</td>" + "<td></td>" * total_common
-        for d in dates:
-            key = d.strftime("%Y-%m-%d")
-            rnd = get_rnd(row[2], key)
-            t1 = f"{rnd.randint(7, 9):02d}:00"
-            kms = rnd.randint(20, 120)
-            costs = kms * 5
-            fr = round(rnd.uniform(800, 1200), 2)
-            dest = rnd.choice(["Riga", "Poznan"])
-            html += ("<td>9</td><td>6</td>"
-                     f"<td>{t1}</td><td>{t1}</td><td>16:00</td>"
-                     f"<td>{dest}</td><td></td>"
-                     f"<td>{kms}</td><td>{costs}</td><td></td><td>{fr}</td>")
-        html += "</tr>\n"
-        row_num += 2
-
-    html += "</table></div>"
-    st.markdown(html, unsafe_allow_html=True)
+    st.dataframe(df, use_container_width=True)
