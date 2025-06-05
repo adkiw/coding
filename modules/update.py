@@ -106,8 +106,8 @@ def show(conn, c):
         ("komentaras",             "TEXT"),
         ("sa",                     "TEXT"),
         ("created_at",             "TEXT"),
-        ("ats_transporto_vadybininkas", "TEXT"),
-        ("ats_ekspedicijos_vadybininkas", "TEXT"),
+        ("ats_transporto_vadybininkas",    "TEXT"),
+        ("ats_ekspedicijos_vadybininkas",  "TEXT"),
         ("trans_grupe",            "TEXT"),
         ("eksp_grupe",             "TEXT"),
     ]
@@ -138,7 +138,6 @@ def show(conn, c):
     # ==============================
     # 3) Pasirenkame vilkikus pagal filtrus
     # ==============================
-    # Pasiimame kiekvieno vilkiko numerį ir jo transporto grupę (per darbuotojų lentelę)
     vilkikai_info = c.execute("""
         SELECT v.numeris, d.grupe
         FROM vilkikai v
@@ -166,63 +165,51 @@ def show(conn, c):
     # ==============================
     # 4) Paimame kroviniai iš lentelės "kroviniai"
     # ==============================
-    today = date.today()
-    placeholder = st.empty()
-
-    with placeholder.container():
-        # Susirenkame visus krovinių įrašus
-        df_kroviniai = pd.read_sql_query("SELECT * FROM kroviniai", conn)
-
-    # ==============================
-    # 5) Filtruojame kroviniai pagal vilkikus
-    # ==============================
+    df_kroviniai = pd.read_sql_query("SELECT * FROM kroviniai", conn)
     df_kroviniai = df_kroviniai[df_kroviniai["vilkikas"].isin(vilkikai)]
     if df_kroviniai.empty:
         st.info("Nėra krovinio duomenų pasirinktų vilkikų.")
         return
 
     # ==============================
-    # 6) DataFrame transformacijos
+    # 5) DataFrame transformacijos
     # ==============================
-    df_kroviniai["pak_date"] = pd.to_datetime(df_kroviniai["pakrovimo_data"]).dt.date
-    df_kroviniai["ikr_date"] = pd.to_datetime(df_kroviniai["iskrovimo_data"]).dt.date
+    df_kroviniai["pak_date"] = pd.to_datetime(df_kroviniai["pakrovimo_data"], errors="coerce").dt.date
+    df_kroviniai["ikr_date"] = pd.to_datetime(df_kroviniai["iskrovimo_data"], errors="coerce").dt.date
 
-    df_kroviniai["pak_date_str"] = df_kroviniai["pak_date"].astype(str)
-    df_kroviniai["ikr_date_str"] = df_kroviniai["ikr_date"].astype(str)
-
-    # ==============================
-    # 7) Paruošiame duomenis atnaujinimui: einamą laiką ir statusus
-    # ==============================
-    df_kroviniai["rel_time"] = df_kroviniai["created_at"].apply(relative_time)
-    df_kroviniai["pak_time"] = df_kroviniai["pakrovimo_laikas"].astype(str).apply(format_time_str)
-    df_kroviniai["ikr_time"] = df_kroviniai["iskrovimo_laikas"].astype(str).apply(format_time_str)
+    df_kroviniai["pak_date_str"] = df_kroviniai["pak_date"].astype(str).fillna("")
+    df_kroviniai["ikr_date_str"] = df_kroviniai["ikr_date"].astype(str).fillna("")
 
     # ==============================
-    # 8) Atvaizduojame lentelę su horizontaliu skrolu
+    # 6) Paruošiame duomenis atnaujinimui: einamą laiką ir statusus
+    # ==============================
+    df_kroviniai["rel_time"] = df_kroviniai["created_at"].apply(relative_time).fillna("")
+    df_kroviniai["pak_time"] = df_kroviniai["pakrovimo_laikas"].astype(str).apply(format_time_str).fillna("")
+    df_kroviniai["ikr_time"] = df_kroviniai["iskrovimo_laikas"].astype(str).apply(format_time_str).fillna("")
+
+    # ==============================
+    # 7) Atvaizduojame lentelę su horizontaliu skrolu
     # ==============================
     st.markdown("<div class='scroll-container'>", unsafe_allow_html=True)
+
     # Lentelės antraštės
     headers = [
         "💾", "Rel. laikas", "Vilk.", "P.D.", "P.L.", "P.V.", "I.D.", "I.L.", "I.V.", "K.", "Koment.", 
         "Vadyb.", "E.Vad.", "T.Gr.", "E.Gr."
     ]
-    # Parašome HTML rankiniu būdu, kad kontroluotume stilius
     html = "<table>\n<thead><tr>"
     for h in headers:
         html += f"<th>{h}</th>"
     html += "</tr></thead>\n<tbody>\n"
 
-    for idx, row in df_kroviniai.iterrows():
-        k = row  # trumpinys
-        # Atnaujinimo mygtukas
+    for _, k in df_kroviniai.iterrows():
         html += "<tr>\n"
+        # 💾 mygtukas
         html += "<td class='tiny'>" \
-                f"<button style='border:none; background:none; cursor:pointer;' " \
-                f"onclick=\"fetch('/_stcore/streamlit_rerun?script=%2Fmnt%2Fapp.py', " \
-                f"{'{ method: \\\"POST\\\" }')\">\n" \
-                "<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='#000' viewBox='0 0 16 16'>\n" \
-                "<path d='M8 3a5 5 0 1 1-4.546 2.914.5.5 0 1 0-.908-.418A6 6 0 1 0 8 2v1z'/>\n" \
-                "<path d='M8 0a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-1 0v-3A.5.5 0 0 1 8 0z'/>\n" \
+                "<button style='border:none; background:none; cursor:pointer;'>" \
+                "<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='#000' viewBox='0 0 16 16'>" \
+                "<path d='M8 3a5 5 0 1 1-4.546 2.914.5.5 0 1 0-.908-.418A6 6 0 1 0 8 2v1z'/>" \
+                "<path d='M8 0a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-1 0v-3A.5.5 0 0 1 8 0z'/>" \
                 "</svg></button></td>\n"
 
         # Rel. laikas
@@ -243,7 +230,7 @@ def show(conn, c):
         # Iškrovimo vieta (I.V.)
         vieta_ikr = k["iskrovimo_kodas"] if k["iskrovimo_kodas"] else ""
         html += f"<td>{vieta_ikr}</td>\n"
-        # Komentaras (K.)
+        # Komentaras (Koment.)
         comment = k["komentaras"] if k["komentaras"] else ""
         html += f"<td class='tiny'>{comment}</td>\n"
         # Vadybininkas (Vadyb.)
@@ -263,8 +250,4 @@ def show(conn, c):
 
     html += "</tbody>\n</table>\n"
     st.markdown(html, unsafe_allow_html=True)
-
-    # ==============================
-    # 9) Uždarome scroll-container div
-    # ==============================
     st.markdown("</div>", unsafe_allow_html=True)
