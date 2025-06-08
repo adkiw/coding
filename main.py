@@ -1,78 +1,58 @@
 import streamlit as st
-import sqlite3
+from darbuotojai import darbuotoju_modulis
+from vairuotojai import vairuotoju_modulis
+from grupes import grupiu_modulis
+from klientai import klientu_modulis
+from vilkikai import vilkiku_modulis
+from priekabos import priekabu_modulis
+from kroviniai import kroviniu_modulis
+from planavimas import planavimo_modulis
+from update import atnaujinimo_modulis
 
-# 1) Privalo būti pirmasis – nustatome platų išdėstymą
-st.set_page_config(layout="wide")
+def main():
+    """
+    Pagrindinė Streamlit programos funkcija.
+    Vykdo pagrindinį navigacijos meniu ir įkelia pasirinktą modulį.
+    Kiekvienas meniu punktas atveria atskirą valdymo modulį.
+    """
+    st.set_page_config(page_title="DISPO – Valdymo sistema", page_icon="🚚", layout="wide")
+    st.sidebar.title("DISPO")
+    pasirinkimas = st.sidebar.radio(
+        "Pasirinkite modulį:",
+        (
+            "Darbuotojai",
+            "Vairuotojai",
+            "Grupės",
+            "Klientai",
+            "Vilkikai",
+            "Priekabos",
+            "Kroviniai",
+            "Planavimas",
+            "Duomenų atnaujinimas"
+        )
+    )
 
-# 2) CSS, kad radio-bar būtų tiesiai lango viršuje ir apie 1 cm aukščio
-st.markdown("""
-    <style>
-      /* Pašaliname visus viršutinius margin’us aplikacijoje */
-      .css-18e3th9 {
-        padding-top: 0 !important;
-      }
-      /* Tiesiogiai taikome CSS radio-grupei: 1 cm aukštis, be papildomų tarpelio */
-      .stRadio > div {
-        height: 1cm !important;
-        margin-top: 0 !important;
-        padding-top: 0 !important;
-        overflow: hidden;
-      }
-      /* Naikiname radio mygtukų vertikalius padding’us */
-      .stRadio > div > label > div {
-        padding-top: 0 !important;
-        padding-bottom: 0 !important;
-      }
-    </style>
-""", unsafe_allow_html=True)
+    # Pagal pasirinkimą kviečiamas atitinkamas modulis.
+    if pasirinkimas == "Darbuotojai":
+        darbuotoju_modulis()
+    elif pasirinkimas == "Vairuotojai":
+        vairuotoju_modulis()
+    elif pasirinkimas == "Grupės":
+        grupiu_modulis()
+    elif pasirinkimas == "Klientai":
+        klientu_modulis()
+    elif pasirinkimas == "Vilkikai":
+        vilkiku_modulis()
+    elif pasirinkimas == "Priekabos":
+        priekabu_modulis()
+    elif pasirinkimas == "Kroviniai":
+        kroviniu_modulis()
+    elif pasirinkimas == "Planavimas":
+        planavimo_modulis()
+    elif pasirinkimas == "Duomenų atnaujinimas":
+        atnaujinimo_modulis()
+    else:
+        st.warning("Nepavyko pasirinkti modulio.")
 
-# 3) Prisijungimas prie SQLite DB
-conn = sqlite3.connect("dispo_new.db", check_same_thread=False)
-c = conn.cursor()
-
-# 4) Importuojame modulius (Dispo ir Nustatymai moduliai pašalinti)
-from modules import (
-    kroviniai,
-    vilkikai,
-    priekabos,
-    grupes,
-    vairuotojai,
-    klientai,
-    darbuotojai,
-    planavimas,
-    update
-)
-
-# 5) Tiesiai viršuje – horizontalus mygtukų baras (radio be užrašų)
-moduliai = [
-    "Kroviniai",
-    "Vilkikai",
-    "Priekabos",
-    "Grupės",
-    "Vairuotojai",
-    "Klientai",
-    "Darbuotojai",
-    "Planavimas",
-    "Update"
-]
-pasirinktas = st.radio("", moduliai, horizontal=True)
-
-# 6) Pagal pasirinktą modulį kviečiame atitinkamą funkciją
-if pasirinktas == "Kroviniai":
-    kroviniai.show(conn, c)
-elif pasirinktas == "Vilkikai":
-    vilkikai.show(conn, c)
-elif pasirinktas == "Priekabos":
-    priekabos.show(conn, c)
-elif pasirinktas == "Grupės":
-    grupes.show(conn, c)
-elif pasirinktas == "Vairuotojai":
-    vairuotojai.show(conn, c)
-elif pasirinktas == "Klientai":
-    klientai.show(conn, c)
-elif pasirinktas == "Darbuotojai":
-    darbuotojai.show(conn, c)
-elif pasirinktas == "Planavimas":
-    planavimas.show(conn, c)
-elif pasirinktas == "Update":
-    update.show(conn, c)
+if __name__ == "__main__":
+    main()
