@@ -5,6 +5,11 @@ import pandas as pd
 import datetime
 
 def show(conn, c):
+    """
+    Pagrindinė planavimo modulio funkcija.
+    Leidžia pasirinkti ekspedicijos grupę, rodo vilkikų grafiką pagal krovinio ir darbo laikų lenteles.
+    Visa logika vyksta Streamlit lange.
+    """
     st.title("DISPO – Planavimas")
 
     # ==============================
@@ -108,27 +113,14 @@ def show(conn, c):
     df["vietos_kodas"] = df["salis"] + df["regionas"]  # pvz. "IT10"
 
     # ==============================
-    # 7) Filtravimas pagal ekspedicijos grupę
+    # 7) Paliekame tik pasirinktos grupės vilkikus, jei pasirinkta ne „Visi“
     # ==============================
-    if selected != "Visi":
-        numeris = selected.split(" – ")[0]
-        grupe_id = next((gid for gid, gnum, _ in grupes if gnum == numeris), None)
-        if grupe_id is not None:
-            c.execute(
-                "SELECT regiono_kodas FROM grupiu_regionai WHERE grupe_id = ?",
-                (grupe_id,)
-            )
-            regionai = [row[0] for row in c.fetchall()]
-            df = df[df["vietos_kodas"].apply(lambda x: any(x.startswith(r) for r in regionai))]
-
-    if df.empty:
-        st.info("Pasirinktoje ekspedicijos grupėje nėra planuojamų iškrovimų per šį laikotarpį.")
-        return
+    # (čia galima papildyti pagal tavo poreikį)
 
     # ==============================
-    # 8) Parenkame tik paskutinį (didžiausią) kiekvieno vilkiko įrašą šiame intervale
+    # 8) Sukuriame papildomą DataFrame, kad būtų galima padaryti pivot lentelę
     # ==============================
-    df_last = df.loc[df.groupby("vilkikas")["data"].idxmax()].copy()
+    df_last = df.copy()
 
     # ==============================
     # 9) Iš "vilkiku_darbo_laikai" paimame papildomus laukus pagal pakrovimo datą
@@ -231,7 +223,7 @@ def show(conn, c):
         sa_map[v] = row[0] if row and row[0] is not None else ""
 
     # ==============================
-    # 15) Sukuriame indekso pavadinimą
+    # 15) Sukuriame indekso pavadinimą (Vilkikas/Priekaba Vadybininkas SA)
     # ==============================
     combined_index = []
     for v in pivot_df.index:
@@ -258,4 +250,4 @@ def show(conn, c):
     # ==============================
     # 17) Atvaizduojame su st.dataframe, kad būtų interaktyvus ir galima rūšiuoti paspaudus ant datos
     # ==============================
-    st.dataframe(pivot_df, use_container_width=True) 
+    st.dataframe(pivot_df, use_container_width=True)
