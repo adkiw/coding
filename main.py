@@ -1,58 +1,65 @@
+# main.py
 import streamlit as st
-from darbuotojai import darbuotoju_modulis
-from vairuotojai import vairuotoju_modulis
-from grupes import grupiu_modulis
-from klientai import klientu_modulis
-from vilkikai import vilkiku_modulis
-from priekabos import priekabu_modulis
-from kroviniai import kroviniu_modulis
-from planavimas import planavimo_modulis
-from update import atnaujinimo_modulis
 
-def main():
-    """
-    Pagrindinė Streamlit programos funkcija.
-    Vykdo pagrindinį navigacijos meniu ir įkelia pasirinktą modulį.
-    Kiekvienas meniu punktas atveria atskirą valdymo modulį.
-    """
-    st.set_page_config(page_title="DISPO – Valdymo sistema", page_icon="🚚", layout="wide")
-    st.sidebar.title("DISPO")
-    pasirinkimas = st.sidebar.radio(
-        "Pasirinkite modulį:",
-        (
-            "Darbuotojai",
-            "Vairuotojai",
-            "Grupės",
-            "Klientai",
-            "Vilkikai",
-            "Priekabos",
-            "Kroviniai",
-            "Planavimas",
-            "Duomenų atnaujinimas"
-        )
-    )
+# 1) Puslapio nustatymai – plotis „wide“
+st.set_page_config(layout="wide")
 
-    # Pagal pasirinkimą kviečiamas atitinkamas modulis.
-    if pasirinkimas == "Darbuotojai":
-        darbuotoju_modulis()
-    elif pasirinkimas == "Vairuotojai":
-        vairuotoju_modulis()
-    elif pasirinkimas == "Grupės":
-        grupiu_modulis()
-    elif pasirinkimas == "Klientai":
-        klientu_modulis()
-    elif pasirinkimas == "Vilkikai":
-        vilkiku_modulis()
-    elif pasirinkimas == "Priekabos":
-        priekabu_modulis()
-    elif pasirinkimas == "Kroviniai":
-        kroviniu_modulis()
-    elif pasirinkimas == "Planavimas":
-        planavimo_modulis()
-    elif pasirinkimas == "Duomenų atnaujinimas":
-        atnaujinimo_modulis()
-    else:
-        st.warning("Nepavyko pasirinkti modulio.")
+# 2) Minimalus CSS, kad viršuje būtų mažesni tarpai (gražesnis meniu)
+st.markdown("""
+<style>
+  .css-18e3th9 { padding-top: 0 !important; }
+  .stRadio > div          { height: 1cm !important; margin-top: 0 !important; }
+  .stRadio > div > label > div { padding-top: 0 !important; padding-bottom: 0 !important; }
+</style>
+""", unsafe_allow_html=True)
 
-if __name__ == "__main__":
-    main()
+# 3) Inicializuojame DB – lentelės sukuriamos funkcijoje init_db()
+from db import init_db
+conn, c = init_db()    # naudos failą „main.db“
+
+# 4) Importuojame visus modulius (modulinė struktūra: visi modulių failai viename kataloge)
+from modules import (
+    kroviniai,
+    vilkikai,
+    priekabos,
+    grupes,
+    vairuotojai,
+    klientai,
+    darbuotojai,
+    planavimas,
+    update
+)
+
+# 5) Horizontalus meniu (modulių pavadinimai)
+moduliai = [
+    "Kroviniai",
+    "Vilkikai",
+    "Priekabos",
+    "Grupės",
+    "Vairuotojai",
+    "Klientai",
+    "Darbuotojai",
+    "Planavimas",
+    "Update"
+]
+pasirinktas = st.radio("", moduliai, horizontal=True)
+
+# 6) Maršrutizacija – pagal pasirinkimą atidaromas atitinkamas modulis
+if pasirinktas == "Kroviniai":
+    kroviniai.show(conn, c)
+elif pasirinktas == "Vilkikai":
+    vilkikai.show(conn, c)
+elif pasirinktas == "Priekabos":
+    priekabos.show(conn, c)
+elif pasirinktas == "Grupės":
+    grupes.show(conn, c)
+elif pasirinktas == "Vairuotojai":
+    vairuotojai.show(conn, c)
+elif pasirinktas == "Klientai":
+    klientai.show(conn, c)
+elif pasirinktas == "Darbuotojai":
+    darbuotojai.show(conn, c)
+elif pasirinktas == "Planavimas":
+    planavimas.show(conn, c)
+elif pasirinktas == "Update":
+    update.show(conn, c)
