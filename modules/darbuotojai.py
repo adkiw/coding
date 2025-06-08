@@ -2,6 +2,13 @@ import streamlit as st
 import pandas as pd
 
 def show(conn, c):
+    """
+    Pagrindinė darbuotojų valdymo funkcija. Leidžia:
+    - Peržiūrėti visų darbuotojų sąrašą, filtruoti pagal bet kurį lauką.
+    - Kurti naują darbuotoją arba redaguoti esamą.
+    - Saugo visus pakeitimus į duomenų bazę.
+    Viskas vyksta Streamlit aplikacijos lange.
+    """
     # Užtikrinti, kad egzistuotų stulpelis „aktyvus“ darbuotojų lentelėje
     c.execute("PRAGMA table_info(darbuotojai)")
     cols = {row[1] for row in c.fetchall()}
@@ -9,14 +16,17 @@ def show(conn, c):
         c.execute("ALTER TABLE darbuotojai ADD COLUMN aktyvus INTEGER DEFAULT 1")
         conn.commit()
 
-    # Callback’ai
+    # Callback’ai būsenos valdymui
     def clear_selection():
+        """Išvalo pasirinktą darbuotoją iš session_state."""
         st.session_state.selected_emp = None
 
     def start_new():
+        """Nustato būsena, kad kuriamas naujas darbuotojas."""
         st.session_state.selected_emp = 0
 
     def start_edit(emp_id):
+        """Pasirenkamas darbuotojas redagavimui pagal ID."""
         st.session_state.selected_emp = emp_id
 
     # Antraštė + „Pridėti naują darbuotoją“ mygtukas
@@ -24,12 +34,13 @@ def show(conn, c):
     title_col.title("DISPO – Darbuotojai")
     add_col.button("➕ Pridėti naują darbuotoją", on_click=start_new, use_container_width=True)
 
-    # Inicializuojame būseną
+    # Inicializuojame būseną, jei pirmas paleidimas
     if 'selected_emp' not in st.session_state:
         st.session_state.selected_emp = None
 
-    # 1. SĄRAŠO rodinys su filtravimu (be headerių virš ir po filtrų)
+    # 1. SĄRAŠO rodinys su filtravimu
     if st.session_state.selected_emp is None:
+        # Užklausiam visų darbuotojų su visais stulpeliais
         df = pd.read_sql(
             "SELECT id, vardas, pavarde, pareigybe, el_pastas, telefonas, grupe, aktyvus FROM darbuotojai",
             conn
@@ -42,20 +53,20 @@ def show(conn, c):
         # Paruošiame rodymui: None → ""
         df = df.fillna('')
 
-        # 1.1) Filtravimo laukai su placeholder’iais (tik patys filtrai, be antraščių)
+        # 1.1) Filtravimo laukai su placeholder’iais
         filter_cols = st.columns(len(df.columns) + 1)
         for i, col in enumerate(df.columns):
             filter_cols[i].text_input(label="", placeholder=col, key=f"f_emp_{col}")
         filter_cols[-1].write("")
 
-        # 1.2) Taikome filtrus
+        # 1.2) Taikome filtrus pagal vartotojo įvestį
         df_filt = df.copy()
         for col in df.columns:
             val = st.session_state.get(f"f_emp_{col}", "")
             if val:
                 df_filt = df_filt[df_filt[col].astype(str).str.contains(val, case=False, na=False)]
 
-        # 1.3) Eilučių atvaizdavimas su redagavimo mygtuku (be headerių po filtrų)
+        # 1.3) Atvaizduojame kiekvieną eilutę su redagavimo mygtuku
         for _, row in df_filt.iterrows():
             row_cols = st.columns(len(df_filt.columns) + 1)
             for i, col in enumerate(df_filt.columns):
@@ -76,6 +87,7 @@ def show(conn, c):
     is_new = (sel == 0)
     emp_data = {}
     if not is_new:
+        # Gauname pasirinkto darbuotojo duomenis
         df_emp = pd.read_sql(
             "SELECT * FROM darbuotojai WHERE id=?", conn,
             params=(sel,)
@@ -159,6 +171,7 @@ def show(conn, c):
 
     # 8) Išsaugojimo ir „Grįžti“ mygtukai
     def do_save():
+        """Įrašo naują darbuotoją arba atnaujina esamą duomenų bazėje pagal formos laukus."""
         fields = ["vardas", "pavarde", "pareigybe", "el_pastas", "telefonas", "grupe"]
         vals = [st.session_state[key] for key in fields]
         # Aktyvumo reikšmė: 1 ar 0
