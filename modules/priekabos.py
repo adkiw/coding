@@ -1,11 +1,38 @@
+"""
+modulis: priekabos.py
+
+Pagrindinė funkcija `show` suteikia Streamlit aplinkoje:
+- Priekabų lentelės struktūros užtikrinimą (ALTER TABLE prireikus).
+- Priekabų peržiūrą, filtravimą, naujų įrašų kūrimą ir esamų redagavimą.
+- Ryšį su vilkikai moduliu (priskirtų vilkikų atvaizdavimas).
+- CSV eksporto galimybę.
+"""
+
 import streamlit as st
 import pandas as pd
 from datetime import date
 
 def show(conn, c):
+    """
+    Rodo priekabų valdymo modulį Streamlit lange.
+
+    Funkcijos eiga:
+    1) Užtikrinami visi reikalingi stulpeliai lentelėje `priekabos`.
+    2) Ruošiami duomenys dropdown formoms (vilkikų sąrašas).
+    3) Nustatoma Streamlit sesijos būsena.
+    4) Pagal būseną rodomas:
+       a) Redagavimo forma (kai pasirenkama egzistuojanti priekaba),
+       b) Įvedimo forma (kai paspaustas "Pridėti naują"),
+       c) Lentelės rodinys su filtravimo ir CSV eksporto galimybėmis.
+    5) Duomenų įrašai arba atnaujinimai saugomi DB per `conn` ir `c`.
+
+    Args:
+        conn (sqlite3.Connection): Atidarytas SQLite prisijungimas.
+        c (sqlite3.Cursor): Duomenų bazės kursorius.
+    """
     st.title("Priekabų valdymas")
 
-    # 1) Užtikriname, kad lentelėje 'priekabos' egzistuotų visi reikalingi stulpeliai
+    # 1) Užtikriname, kad lentelėje 'priekabos' egzistuotų visi reikiami stulpeliai
     existing = [r[1] for r in c.execute("PRAGMA table_info(priekabos)").fetchall()]
     extras = {
         'priekabu_tipas': 'TEXT',
@@ -14,39 +41,41 @@ def show(conn, c):
         'pagaminimo_metai': 'TEXT',
         'tech_apziura': 'TEXT',
         'draudimas': 'TEXT'
-        # Nebereikalingas 'priskirtas_vilkikas' stulpelis, nes jį gausime iš vilkikai modulyje
     }
     for col, typ in extras.items():
         if col not in existing:
             c.execute(f"ALTER TABLE priekabos ADD COLUMN {col} {typ}")
     conn.commit()
 
-    # 2) Paruošiame Dropdown duomenis
+    # 2) Paruošiame duomenis dropdown meniu: vilkikų sąrašą
     vilkikai_list = [r[0] for r in c.execute("SELECT numeris FROM vilkikai").fetchall()]
 
-    # 3) Sesijos būsena
+    # 3) Inicializuojame sesijos būseną redagavimui/pridėjimui
     if 'selected_priek' not in st.session_state:
         st.session_state.selected_priek = None
 
+    # Callback'ai
     def clear_sel():
+        """Išvalo pasirinkimą ir filtrus iš session_state."""
         st.session_state.selected_priek = None
-        # Išvalome filtrus
         for key in list(st.session_state):
             if key.startswith("f_"):
                 st.session_state[key] = ""
 
     def new():
+        """Pradeda naujos priekabos kūrimo režimą."""
         st.session_state.selected_priek = 0
 
     def edit(id):
+        """Pasirenkama esama priekaba redagavimui pagal ID."""
         st.session_state.selected_priek = id
 
-    # 4) "Pridėti priekabą" mygtukas viršuje
+    # 4) „Pridėti priekabą“ mygtukas
     st.button("➕ Pridėti priekabą", on_click=new, use_container_width=True)
 
     sel = st.session_state.selected_priek
 
-    # 5) Redagavimo rodinys (kai pasirenkama esama priekaba)
+    # 5) Redagavimo rodinys (kai pasirenkama egzistuojanti priekaba)
     if sel not in (None, 0):
         df_sel = pd.read_sql_query(
             "SELECT * FROM priekabos WHERE id = ?", conn, params=(sel,)
@@ -58,14 +87,12 @@ def show(conn, c):
 
         row = df_sel.iloc[0]
         with st.form("edit_form", clear_on_submit=False):
-            # 5.1) Priekabos tipas – DROPlistas su fiksuotomis reikšmėmis
+            # 5.1) Priekabos tipas
             priekabu_tipas_opts = ["", "Standartinis Tentas", "Kietašonė puspriekabė", "Šaldytuvas"]
-            tip_idx = 0
-            if row['priekabu_tipas'] in priekabu_tipas_opts:
-                tip_idx = priekabu_tipas_opts.index(row['priekabu_tipas'])
+            tip_idx = priekabu_tipas_opts.index(row['priekabu_tipas']) if row['priekabu_tipas'] in priekabu_tipas_opts else 0
             tip = st.selectbox("Priekabos tipas", priekabu_tipas_opts, index=tip_idx)
 
-            # 5.2) Kiti laukai
+            # 5.2) Kiti laukai: numeris, markė, datos
             num = st.text_input("Numeris", value=row['numeris'])
             model = st.text_input("Markė", value=row['marke'])
             pr_data = st.date_input(
@@ -84,13 +111,14 @@ def show(conn, c):
                 key="draud_date"
             )
 
-            # 5.3) Priskirtas vilkikas – skaitome iš vilkikai lentelės
+            # 5.3) Priskirtas vilkikas (tik skaitomas, negalima keisti čia)
             assigned_vilk = c.execute(
                 "SELECT numeris FROM vilkikai WHERE priekaba = ?", (row['numeris'],)
             ).fetchone()
             pv = assigned_vilk[0] if assigned_vilk else ""
             st.text_input("Priskirtas vilkikas", value=pv, disabled=True)
 
+            # Veiksmai mygtukais
             col1, col2 = st.columns(2)
             save = col1.form_submit_button("💾 Išsaugoti")
             back = col2.form_submit_button("🔙 Grįžti į sąrašą", on_click=clear_sel)
@@ -103,9 +131,9 @@ def show(conn, c):
                         tip or None,
                         num,
                         model or None,
-                        (pr_data.isoformat() if pr_data else None),
-                        (tech.isoformat() if tech else None),
-                        (draud_date.isoformat() if draud_date else None),
+                        pr_data.isoformat() if pr_data else None,
+                        tech.isoformat() if tech else None,
+                        draud_date.isoformat() if draud_date else None,
                         sel
                     )
                 )
@@ -155,13 +183,13 @@ def show(conn, c):
                     st.error(f"❌ Klaida: {e}")
         return
 
-    # 7) Priekabų sąrašas
+    # 7) Priekabų sąrašas lentelės pavidalu su filtravimo ir CSV eksporto galimybe
     df = pd.read_sql_query("SELECT * FROM priekabos", conn)
     if df.empty:
         st.info("ℹ️ Nėra priekabų.")
         return
 
-    # 7.1) Paruošiame rodymui: None → ""
+    # 7.1) None → tuščias string
     df = df.fillna('')
     df_disp = df.copy()
     df_disp.rename(
@@ -173,7 +201,7 @@ def show(conn, c):
         inplace=True
     )
 
-    # 7.2) Pridedame stulpelį "Priskirtas vilkikas" pagal vilkikai modulį
+    # 7.2) Pridedame stulpelį "Priskirtas vilkikas"
     assigned_list = []
     for _, row in df.iterrows():
         prn = row['numeris']
@@ -183,15 +211,7 @@ def show(conn, c):
         assigned_list.append(assigned_vilk[0] if assigned_vilk else "")
     df_disp['Priskirtas vilkikas'] = assigned_list
 
-    # 7.3) Apskaičiuojame kiek dienų iki tech apžiūros ir draudimo
-    df_disp['Liko iki tech apžiūros'] = df_disp['tech_apziura'].apply(
-        lambda x: (date.fromisoformat(x) - date.today()).days if x else ''
-    )
-    df_disp['Liko iki draudimo'] = df_disp['Draudimo galiojimo pabaiga'].apply(
-        lambda x: (date.fromisoformat(x) - date.today()).days if x else ''
-    )
-
-    # 7.4) Filtravimo laukai (tik placeholder, be jokių headerių virš jų)
+    # 7.3) Filtravimo placeholder'ai (be headerių)
     filter_cols = st.columns(len(df_disp.columns) + 1)
     for i, col in enumerate(df_disp.columns):
         filter_cols[i].text_input(label="", placeholder=col, key=f"f_{col}")
@@ -201,11 +221,9 @@ def show(conn, c):
     for col in df_disp.columns:
         val = st.session_state.get(f"f_{col}", "")
         if val:
-            df_filt = df_filt[
-                df_filt[col].astype(str).str.lower().str.startswith(val.lower())
-            ]
+            df_filt = df_filt[df_filt[col].astype(str).str.lower().str.startswith(val.lower())]
 
-    # 7.5) Lentelės eilutės su redagavimo mygtuku (be headerių po filtrų)
+    # 7.4) Eilučių atvaizdavimas su mygtukais redagavimui
     for _, row in df_filt.iterrows():
         row_cols = st.columns(len(df_filt.columns) + 1)
         for i, col in enumerate(df_filt.columns):
@@ -217,7 +235,7 @@ def show(conn, c):
             args=(row['id'],)
         )
 
-    # 7.6) Eksportas į CSV
+    # 7.5) CSV eksporto galimybė
     csv = df.to_csv(index=False, sep=';').encode('utf-8')
     st.download_button(
         label="💾 Eksportuoti kaip CSV",
