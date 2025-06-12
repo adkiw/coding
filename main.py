@@ -13,9 +13,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 3) Initialise the DB – tables are created inside init_db()
-from db import init_db
-conn, c = init_db()    # uses the file "main.db"
+
 
 # 4) Import all modules (modular structure: all module files in one folder)
 from modules import (
