@@ -13,15 +13,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 3) Initialise the DB – tables are created inside connect()
-from db import connect
-
-# Maintain DB connection across Streamlit reruns
-if "db_conn" not in st.session_state or "db_cursor" not in st.session_state:
-    st.session_state.db_conn, st.session_state.db_cursor = connect()
-
-conn = st.session_state.db_conn
-c = st.session_state.db_cursor
+ main
 
 # 4) Import all modules (modular structure: all module files in one folder)
 from modules import (
@@ -48,12 +40,7 @@ modules_list = [
     "Planning",
     "Update"
 ]
-selected = st.radio(
-    "Select module",
-    modules_list,
-    horizontal=True,
-    label_visibility="collapsed",
-)
+ main
 
 # 6) Maršrutizacija – pagal pasirinkimą atidaromas atitinkamas modulis
 if selected == "Cargo":
