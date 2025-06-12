@@ -13,7 +13,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-
+ main
 
 # 4) Import all modules (modular structure: all module files in one folder)
 from modules import (
@@ -40,7 +40,7 @@ modules_list = [
     "Planning",
     "Update"
 ]
-selected = st.radio("", modules_list, horizontal=True)
+ main
 
 # 6) Maršrutizacija – pagal pasirinkimą atidaromas atitinkamas modulis
 if selected == "Cargo":
