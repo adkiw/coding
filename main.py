@@ -1,10 +1,10 @@
 # main.py
 import streamlit as st
 
-# 1) Puslapio nustatymai – plotis „wide“
+# 1) Page settings – use wide layout
 st.set_page_config(layout="wide")
 
-# 2) Minimalus CSS, kad viršuje būtų mažesni tarpai (gražesnis meniu)
+# 2) Minimal CSS to reduce spacing at the top of the page
 st.markdown("""
 <style>
   .css-18e3th9 { padding-top: 0 !important; }
@@ -13,11 +13,11 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# 3) Inicializuojame DB – lentelės sukuriamos funkcijoje init_db()
+# 3) Initialise the DB – tables are created inside init_db()
 from db import init_db
-conn, c = init_db()    # naudos failą „main.db“
+conn, c = init_db()    # uses the file "main.db"
 
-# 4) Importuojame visus modulius (modulinė struktūra: visi modulių failai viename kataloge)
+# 4) Import all modules (modular structure: all module files in one folder)
 from modules import (
     kroviniai,
     vilkikai,
@@ -30,36 +30,36 @@ from modules import (
     update
 )
 
-# 5) Horizontalus meniu (modulių pavadinimai)
-moduliai = [
-    "Kroviniai",
-    "Vilkikai",
-    "Priekabos",
-    "Grupės",
-    "Vairuotojai",
-    "Klientai",
-    "Darbuotojai",
-    "Planavimas",
+# 5) Horizontal menu (module titles)
+modules_list = [
+    "Cargo",
+    "Trucks",
+    "Trailers",
+    "Groups",
+    "Drivers",
+    "Clients",
+    "Employees",
+    "Planning",
     "Update"
 ]
-pasirinktas = st.radio("", moduliai, horizontal=True)
+selected = st.radio("", modules_list, horizontal=True)
 
 # 6) Maršrutizacija – pagal pasirinkimą atidaromas atitinkamas modulis
-if pasirinktas == "Kroviniai":
+if selected == "Cargo":
     kroviniai.show(conn, c)
-elif pasirinktas == "Vilkikai":
+elif selected == "Trucks":
     vilkikai.show(conn, c)
-elif pasirinktas == "Priekabos":
+elif selected == "Trailers":
     priekabos.show(conn, c)
-elif pasirinktas == "Grupės":
+elif selected == "Groups":
     grupes.show(conn, c)
-elif pasirinktas == "Vairuotojai":
+elif selected == "Drivers":
     vairuotojai.show(conn, c)
-elif pasirinktas == "Klientai":
+elif selected == "Clients":
     klientai.show(conn, c)
-elif pasirinktas == "Darbuotojai":
+elif selected == "Employees":
     darbuotojai.show(conn, c)
-elif pasirinktas == "Planavimas":
+elif selected == "Planning":
     planavimas.show(conn, c)
-elif pasirinktas == "Update":
+elif selected == "Update":
     update.show(conn, c)
