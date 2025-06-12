@@ -30,7 +30,7 @@ def show(conn, c):
         conn (sqlite3.Connection): Atidarytas SQLite prisijungimas.
         c (sqlite3.Cursor): Duomenų bazės kursorius.
     """
-    st.title("Priekabų valdymas")
+    st.title("Trailer management")
 
     # 1) Užtikriname, kad lentelėje 'priekabos' egzistuotų visi reikiami stulpeliai
     existing = [r[1] for r in c.execute("PRAGMA table_info(priekabos)").fetchall()]
@@ -70,8 +70,8 @@ def show(conn, c):
         """Pasirenkama esama priekaba redagavimui pagal ID."""
         st.session_state.selected_priek = id
 
-    # 4) „Pridėti priekabą“ mygtukas
-    st.button("➕ Pridėti priekabą", on_click=new, use_container_width=True)
+    # 4) "Add trailer" button
+    st.button("➕ Add trailer", on_click=new, use_container_width=True)
 
     sel = st.session_state.selected_priek
 
@@ -87,26 +87,26 @@ def show(conn, c):
 
         row = df_sel.iloc[0]
         with st.form("edit_form", clear_on_submit=False):
-            # 5.1) Priekabos tipas
-            priekabu_tipas_opts = ["", "Standartinis Tentas", "Kietašonė puspriekabė", "Šaldytuvas"]
+            # 5.1) Trailer type
+            priekabu_tipas_opts = ["", "Curtain", "Box trailer", "Reefer", "Cistern"]
             tip_idx = priekabu_tipas_opts.index(row['priekabu_tipas']) if row['priekabu_tipas'] in priekabu_tipas_opts else 0
-            tip = st.selectbox("Priekabos tipas", priekabu_tipas_opts, index=tip_idx)
+            tip = st.selectbox("Trailer type", priekabu_tipas_opts, index=tip_idx)
 
             # 5.2) Kiti laukai: numeris, markė, datos
-            num = st.text_input("Numeris", value=row['numeris'])
-            model = st.text_input("Markė", value=row['marke'])
+            num = st.text_input("Number", value=row['numeris'])
+            model = st.text_input("Brand", value=row['marke'])
             pr_data = st.date_input(
-                "Pirmos registracijos data",
+                "First registration date",
                 value=(date.fromisoformat(row['pagaminimo_metai']) if row['pagaminimo_metai'] else date(2000,1,1)),
                 key="pr_data"
             )
             tech = st.date_input(
-                "Tech. apžiūra",
+                "Technical inspection",
                 value=(date.fromisoformat(row['tech_apziura']) if row['tech_apziura'] else date.today()),
                 key="tech_date"
             )
             draud_date = st.date_input(
-                "Draudimo galiojimo pabaiga",
+                "Insurance expiry date",
                 value=(date.fromisoformat(row['draudimas']) if row['draudimas'] else date.today()),
                 key="draud_date"
             )
@@ -116,12 +116,12 @@ def show(conn, c):
                 "SELECT numeris FROM vilkikai WHERE priekaba = ?", (row['numeris'],)
             ).fetchone()
             pv = assigned_vilk[0] if assigned_vilk else ""
-            st.text_input("Priskirtas vilkikas", value=pv, disabled=True)
+            st.text_input("Assigned truck", value=pv, disabled=True)
 
             # Veiksmai mygtukais
             col1, col2 = st.columns(2)
-            save = col1.form_submit_button("💾 Išsaugoti")
-            back = col2.form_submit_button("🔙 Grįžti į sąrašą", on_click=clear_sel)
+            save = col1.form_submit_button("💾 Save")
+            back = col2.form_submit_button("🔙 Back to list", on_click=clear_sel)
 
         if save:
             try:
@@ -138,31 +138,31 @@ def show(conn, c):
                     )
                 )
                 conn.commit()
-                st.success("✅ Pakeitimai išsaugoti.")
+                st.success("✅ Changes saved.")
                 clear_sel()
             except Exception as e:
-                st.error(f"❌ Klaida: {e}")
+                st.error(f"❌ Error: {e}")
         return
 
     # 6) Naujos priekabos įvedimo forma
     if sel == 0:
         with st.form("new_form", clear_on_submit=True):
-            priekabu_tipas_opts = ["", "Standartinis Tentas", "Kietašonė puspriekabė", "Šaldytuvas"]
-            tip = st.selectbox("Priekabos tipas", priekabu_tipas_opts)
+            priekabu_tipas_opts = ["", "Curtain", "Box trailer", "Reefer", "Cistern"]
+            tip = st.selectbox("Trailer type", priekabu_tipas_opts)
 
-            num = st.text_input("Numeris")
-            model = st.text_input("Markė")
-            pr_data = st.date_input("Pirmos registracijos data", value=date(2000,1,1), key="new_pr_data")
-            tech = st.date_input("Tech. apžiūra", value=date.today(), key="new_tech_date")
-            draud_date = st.date_input("Draudimo galiojimo pabaiga", value=date.today(), key="new_draud_date")
+            num = st.text_input("Number")
+            model = st.text_input("Brand")
+            pr_data = st.date_input("First registration date", value=date(2000,1,1), key="new_pr_data")
+            tech = st.date_input("Technical inspection", value=date.today(), key="new_tech_date")
+            draud_date = st.date_input("Insurance expiry date", value=date.today(), key="new_draud_date")
 
             col1, col2 = st.columns(2)
-            save = col1.form_submit_button("💾 Išsaugoti priekabą")
-            back = col2.form_submit_button("🔙 Grįžti į sąrašą", on_click=clear_sel)
+            save = col1.form_submit_button("💾 Save trailer")
+            back = col2.form_submit_button("🔙 Back to list", on_click=clear_sel)
 
         if save:
             if not num:
-                st.warning("⚠️ Įveskite numerį.")
+                st.warning("⚠️ Enter number.")
             else:
                 try:
                     c.execute(
@@ -177,16 +177,16 @@ def show(conn, c):
                         )
                     )
                     conn.commit()
-                    st.success("✅ Priekaba įrašyta.")
+                    st.success("✅ Trailer saved.")
                     clear_sel()
                 except Exception as e:
-                    st.error(f"❌ Klaida: {e}")
+                    st.error(f"❌ Error: {e}")
         return
 
     # 7) Priekabų sąrašas lentelės pavidalu su filtravimo ir CSV eksporto galimybe
     df = pd.read_sql_query("SELECT * FROM priekabos", conn)
     if df.empty:
-        st.info("ℹ️ Nėra priekabų.")
+        st.info("ℹ️ No trailers.")
         return
 
     # 7.1) None → tuščias string
@@ -194,9 +194,9 @@ def show(conn, c):
     df_disp = df.copy()
     df_disp.rename(
         columns={
-            'marke': 'Markė',
-            'pagaminimo_metai': 'Pirmos registracijos data',
-            'draudimas': 'Draudimo galiojimo pabaiga'
+            'marke': 'Brand',
+            'pagaminimo_metai': 'First registration date',
+            'draudimas': 'Insurance expiry date'
         },
         inplace=True
     )
@@ -209,7 +209,7 @@ def show(conn, c):
             "SELECT numeris FROM vilkikai WHERE priekaba = ?", (prn,)
         ).fetchone()
         assigned_list.append(assigned_vilk[0] if assigned_vilk else "")
-    df_disp['Priskirtas vilkikas'] = assigned_list
+    df_disp['Assigned truck'] = assigned_list
 
     # 7.3) Filtravimo placeholder'ai (be headerių)
     filter_cols = st.columns(len(df_disp.columns) + 1)
@@ -223,7 +223,7 @@ def show(conn, c):
         if val:
             df_filt = df_filt[df_filt[col].astype(str).str.lower().str.startswith(val.lower())]
 
-    # 7.4) Eilučių atvaizdavimas su mygtukais redagavimui
+    # 7.4) Display rows with edit buttons
     for _, row in df_filt.iterrows():
         row_cols = st.columns(len(df_filt.columns) + 1)
         for i, col in enumerate(df_filt.columns):
@@ -235,10 +235,10 @@ def show(conn, c):
             args=(row['id'],)
         )
 
-    # 7.5) CSV eksporto galimybė
+    # 7.5) CSV export
     csv = df.to_csv(index=False, sep=';').encode('utf-8')
     st.download_button(
-        label="💾 Eksportuoti kaip CSV",
+        label="💾 Download CSV",
         data=csv,
         file_name="priekabos.csv",
         mime="text/csv"
